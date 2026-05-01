@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy &mdash; Train</title>
+<meta name="description" content="What Train collects, where it lives, and what it doesn't do.">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
+<link rel="stylesheet" href="/static/landing.css">
+</head>
+<body class="lp">
+
+<header class="lp-nav">
+  <div class="lp-nav__inner">
+    <a href="/login" class="lp-nav__brand">
+      <svg class="lp-nav__logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="12" fill="#0f172a"/>
+        <rect x="6" y="29" width="52" height="6" fill="#94a3b8"/>
+        <rect x="8" y="22" width="6" height="20" fill="#475569"/>
+        <rect x="50" y="22" width="6" height="20" fill="#475569"/>
+        <rect x="16" y="18" width="7" height="28" fill="#dc2626"/>
+        <rect x="25" y="20" width="6" height="24" fill="#2563eb"/>
+        <rect x="33" y="20" width="6" height="24" fill="#2563eb"/>
+        <rect x="41" y="18" width="7" height="28" fill="#dc2626"/>
+      </svg>
+      Train
+    </a>
+    <a class="lp-nav__signin" href="/auth/login">
+      <span class="lp-btn__g" aria-hidden="true">G</span>
+      Sign in
+    </a>
+  </div>
+</header>
+
+<main class="lp-prose lp-container">
+  <h1>Privacy</h1>
+  <p class="updated">Last updated 1 May 2026.</p>
+
+  <p>
+    Train is a one-person workout tracker. The shorter this page is, the more
+    accurate it is &mdash; here's the whole picture.
+  </p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li>Your Google account <b>email and name</b>, via Sign in with Google. We use the email to identify your account; the name is shown on the settings page.</li>
+    <li>The <b>workouts you log</b> &mdash; sets, reps, weights, exercise preferences, timestamps, and the dark/light theme you've chosen.</li>
+    <li>If you use the <b>contact form</b>: whatever message you type, the optional reply email you provide, and your IP address (used for rate-limiting submissions). The message is delivered to me by email; nothing about contact submissions is stored in the app database.</li>
+  </ul>
+
+  <h2>Where it lives</h2>
+  <p>
+    All of it sits in a SQLite database on a single small server in Australia.
+    There's no cloud data warehouse, no third-party analytics, no ad network,
+    no tracking pixels. Backups are taken on the same server.
+  </p>
+
+  <h2>What we don't do</h2>
+  <ul>
+    <li>No analytics or tracking of any kind.</li>
+    <li>No advertising.</li>
+    <li>No selling, sharing, or transferring your data to anyone else.</li>
+    <li>No reading your data ourselves except to fix bugs you've reported.</li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>
+    Two cookies, both first-party: a <b>session cookie</b> so you stay signed
+    in, and a <b>theme cookie</b> remembering whether you prefer dark or light
+    mode. That's the lot.
+  </p>
+
+  <h2>Deleting your data</h2>
+  <p>
+    Email <a href="mailto:james67@gmail.com">james67@gmail.com</a> asking for
+    deletion and your account and every workout under it will be removed,
+    usually within a day or two.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    Any changes to this policy will be posted on this page with the
+    "last updated" date above bumped accordingly.
+  </p>
+</main>
+
+<footer class="lp-foot">
+  <div class="lp-container lp-foot__inner">
+    <span>&copy; Train &middot; built for the gym, not the App Store</span>
+    <nav class="lp-foot__links">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/contact">Contact</a>
+      <a href="/auth/login">Sign in</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -154,6 +154,10 @@ func makeHTTPServer(isProd bool) *http.Server {
 
 	// Public.
 	mux.HandleFunc("GET /login", handleLoginPage)
+	mux.HandleFunc("GET /privacy", handlePrivacyPage)
+	mux.HandleFunc("GET /terms", handleTermsPage)
+	mux.HandleFunc("GET /contact", handleContactPage)
+	mux.HandleFunc("POST /contact", handleContactSubmit)
 	mux.HandleFunc("GET /auth/login", handleAuthLogin)
 	mux.HandleFunc("GET /auth/google/callback", handleAuthCallback)
 	mux.HandleFunc("POST /auth/logout", handleAuthLogout)
@@ -199,7 +203,7 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	data := struct{ ThemeMode string }{ThemeMode: themeFromRequest(r)}
 	if err := templates.ExecuteTemplate(w, "404.html", data); err != nil {
-		slog.Error("Error executing 404 template", "error", err)
+		slog.Error("404 template", "error", err)
 	}
 }
 
@@ -219,7 +223,7 @@ func main() {
 	}
 	loc, err := time.LoadLocation(tzName)
 	if err != nil {
-		slog.Error("invalid APP_TIMEZONE; falling back to UTC", "tz", tzName, "error", err)
+		slog.Error("invalid timezone", "tz", tzName, "error", err, "fallback", "UTC")
 		loc = time.UTC
 	}
 	appLocation = loc
@@ -247,7 +251,7 @@ func main() {
 	}
 
 	if err := initOAuth(context.Background()); err != nil {
-		slog.Warn("OAuth not initialized — /auth/login will fail until env is fixed", "error", err)
+		slog.Warn("oauth init", "error", err, "impact", "/auth/login will fail until env is fixed")
 	}
 
 	slog.Info("starting", "prod", flgProduction, "port", port, "tz", appLocation.String(), "db", dbPath)
@@ -257,7 +261,7 @@ func main() {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("ListenAndServe failed", "error", err)
+			slog.Error("listen and serve", "error", err)
 			os.Exit(1)
 		}
 	}()

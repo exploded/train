@@ -117,6 +117,22 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func renderMarketingPage(w http.ResponseWriter, name string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.ExecuteTemplate(w, name, nil); err != nil {
+		slog.Error("marketing template", "name", name, "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+func handlePrivacyPage(w http.ResponseWriter, r *http.Request) {
+	renderMarketingPage(w, "privacy.html")
+}
+
+func handleTermsPage(w http.ResponseWriter, r *http.Request) {
+	renderMarketingPage(w, "terms.html")
+}
+
 func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	// Local-dev shortcut: skip Google entirely, log in as DEV_USER_EMAIL.
 	if oauthCfg.devEmail != "" {
@@ -215,7 +231,7 @@ func handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, err := upsertUser(r.Context(), claims.Sub, claims.Email, claims.Name)
 	if err != nil {
-		slog.Error("upsertUser", "error", err)
+		slog.Error("upsert user", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
