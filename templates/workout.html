@@ -1,0 +1,58 @@
+{{- /* viewWorkout */ -}}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{.ThemeMode}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="{{if eq .ThemeMode "dark"}}#000000{{else}}#0f172a{{end}}">
+<title>Train</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="page{{if .Locked}} page--locked{{end}}">
+<div class="too-wide"><p>Designed for iPhone &mdash; open on your phone.</p></div>
+
+<div class="phone">
+  <header class="topbar">
+    <a class="topbar__back" href="/" aria-label="back to home">&lsaquo; Back</a>
+    <div class="topbar__date">{{.Date}}</div>
+    {{if .Locked}}
+      {{if .IsToday}}
+        <form class="topbar__action" method="post" action="/workout/{{.ID}}/unfinish">
+          <button type="submit" class="topbar__action-btn">Reopen</button>
+        </form>
+      {{else}}
+        <span class="topbar__action topbar__action--done">Done</span>
+      {{end}}
+    {{else}}
+      <form class="topbar__action" method="post" action="/workout/{{.ID}}/finish">
+        <button type="submit" class="topbar__action-btn topbar__action-btn--primary">Finish</button>
+      </form>
+    {{end}}
+  </header>
+
+  <main class="exercises">
+    {{range .Exercises}}{{template "exercise.html" .}}{{end}}
+  </main>
+
+  <div class="bottom-spacer"></div>
+</div>
+
+<div id="rest-timer" class="rest-timer" hidden>
+  <div class="rest-timer__row">
+    <span class="rest-timer__time" id="rest-timer-time">1:30</span>
+    <span class="rest-timer__label">Rest</span>
+    <button class="rest-timer__close" id="rest-timer-close" aria-label="dismiss">&times;</button>
+  </div>
+  <div class="rest-timer__bar"><div class="rest-timer__fill" id="rest-timer-fill"></div></div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/static/htmx.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

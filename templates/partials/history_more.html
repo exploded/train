@@ -1,0 +1,14 @@
+{{- /* {History []viewHistoryRow, NextOffset int, HasMore bool}
+       Renders one page of history rows; if HasMore, appends a Load more
+       row that, when clicked, replaces itself with the next page. */ -}}
+{{range .History}}{{template "history_row.html" .}}{{end}}
+{{if .HasMore}}
+<li class="history-row history-row--load">
+  <button class="load-more"
+          hx-get="/history/more?offset={{.NextOffset}}"
+          hx-target="closest li"
+          hx-swap="outerHTML">
+    Load more
+  </button>
+</li>
+{{end}}

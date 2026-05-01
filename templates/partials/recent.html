@@ -1,0 +1,14 @@
+{{- /* viewHome (uses .Recent and .HasMore) */ -}}
+<section class="history" aria-labelledby="recent-h">
+  <h2 id="recent-h" class="section-h">Recent</h2>
+  {{if .Recent}}
+    <ul class="history-list">
+      {{range .Recent}}{{template "history_row.html" .}}{{end}}
+    </ul>
+    {{if .HasMore}}
+      <a class="view-all" href="/history">View all sessions <span aria-hidden="true">&rsaquo;</span></a>
+    {{end}}
+  {{else}}
+    <p class="history__empty">No previous workouts yet.</p>
+  {{end}}
+</section>

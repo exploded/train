@@ -1,0 +1,42 @@
+{{- /* viewHome */ -}}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{.ThemeMode}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="{{if eq .ThemeMode "dark"}}#000000{{else}}#0f172a{{end}}">
+<title>Train</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="page page--home">
+<div class="too-wide"><p>Designed for iPhone &mdash; open on your phone.</p></div>
+
+<div class="phone">
+  <header class="topbar topbar--home">
+    <h1 class="topbar__brand">Train</h1>
+    <nav class="topbar__nav">
+      <a href="/charts" class="topbar__nav-link">Charts</a>
+      <a href="/settings" class="topbar__nav-link">Settings</a>
+      <form class="topbar__action" method="post" action="/auth/logout">
+        <button type="submit" class="topbar__nav-link">Sign out</button>
+      </form>
+    </nav>
+  </header>
+
+  <main class="home">
+    {{template "today_card.html" .Today}}
+    {{template "stats_strip.html" .Stats}}
+    {{template "weights_tile.html" .Weights}}
+    {{template "activity_grid.html" .Activity}}
+    {{template "recent.html" .}}
+  </main>
+</div>
+
+<script src="/static/htmx.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

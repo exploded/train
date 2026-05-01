@@ -1,0 +1,41 @@
+{{- /* viewHistory */ -}}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{.ThemeMode}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="{{if eq .ThemeMode "dark"}}#000000{{else}}#0f172a{{end}}">
+<title>History &mdash; Train</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="page page--history">
+<div class="too-wide"><p>Designed for iPhone &mdash; open on your phone.</p></div>
+
+<div class="phone">
+  <header class="topbar">
+    <a class="topbar__back" href="/" aria-label="back to home">&lsaquo; Back</a>
+    <div class="topbar__date">History</div>
+    <span class="topbar__action"></span>
+  </header>
+
+  <main class="home">
+    <section class="history">
+      {{if .History}}
+        <ul class="history-list">
+          {{template "history_more.html" .}}
+        </ul>
+      {{else}}
+        <p class="history__empty">No previous workouts yet.</p>
+      {{end}}
+    </section>
+  </main>
+</div>
+
+<script src="/static/htmx.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

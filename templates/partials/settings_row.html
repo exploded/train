@@ -1,0 +1,20 @@
+{{- /* viewSettingsRow */ -}}
+<li class="settings-row" id="settings-row-{{.ID}}" data-id="{{.ID}}">
+  <button type="button" class="drag-handle js-drag-handle" aria-label="Reorder {{.Name}}" tabindex="-1">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="6" cy="3" r="1.4"></circle><circle cx="10" cy="3" r="1.4"></circle>
+      <circle cx="6" cy="8" r="1.4"></circle><circle cx="10" cy="8" r="1.4"></circle>
+      <circle cx="6" cy="13" r="1.4"></circle><circle cx="10" cy="13" r="1.4"></circle>
+    </svg>
+  </button>
+  <span class="settings-row__name{{if .Hidden}} settings-row__name--off{{end}}">{{.Name}}</span>
+  <button class="toggle{{if not .Hidden}} toggle--on{{end}}"
+          role="switch"
+          aria-checked="{{if .Hidden}}false{{else}}true{{end}}"
+          aria-label="Toggle {{.Name}}"
+          hx-post="/settings/exercise/{{.ID}}/toggle"
+          hx-target="#settings-row-{{.ID}}"
+          hx-swap="outerHTML">
+    <span class="toggle__knob"></span>
+  </button>
+</li>

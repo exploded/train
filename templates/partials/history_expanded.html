@@ -1,0 +1,22 @@
+{{- /* viewExpandedRow */ -}}
+<div class="history-expanded">
+  {{range .Exercises}}
+    <div class="history-ex">
+      <div class="history-ex__head">
+        <span class="history-ex__name">{{.Name}}</span>
+        {{if not .IsCardio}}
+          <span class="history-ex__weight">{{.WeightDisp}} kg</span>
+        {{end}}
+      </div>
+      {{if .IsCardio}}
+        <div class="history-ex__cardio">
+          {{if .WalkingDone}}Done &middot; {{.Detail}}{{else}}Skipped{{end}}
+        </div>
+      {{else}}
+        <div class="history-ex__circles">
+          {{range .Sets}}{{template "circle.html" .}}{{end}}
+        </div>
+      {{end}}
+    </div>
+  {{end}}
+</div>

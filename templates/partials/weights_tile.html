@@ -1,0 +1,24 @@
+{{- /* []viewWeightRow */ -}}
+{{if .}}
+<section class="weights" aria-labelledby="weights-h">
+  <h2 id="weights-h" class="section-h">Working weights</h2>
+  <ul class="weights-list">
+    {{range .}}
+    <li class="weights-row{{if .NextBump}} weights-row--bump{{end}}">
+      <a class="weights-row__link" href="/charts#{{.Slug}}">
+        <span class="weights-row__name">{{.Name}}</span>
+        <span class="weights-row__weight"><b>{{.WeightDisp}}</b> kg</span>
+        <span class="weights-row__streak">
+          {{if .Manual}}
+            <span class="weights-row__manual">manual</span>
+          {{else}}
+            {{range .Dots}}<span class="dot{{if .}} dot--on{{end}}"></span>{{end}}
+            {{if .NextBump}}<span class="weights-row__bumphint">1 to bump</span>{{end}}
+          {{end}}
+        </span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}

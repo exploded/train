@@ -1,0 +1,15 @@
+{{- /* viewStats */ -}}
+<section class="stats-strip" aria-label="Recent activity stats">
+  <div class="stats-strip__tile">
+    <span class="stats-strip__num">{{.ThisWeek}}</span>
+    <span class="stats-strip__lbl">this week</span>
+  </div>
+  <div class="stats-strip__tile">
+    <span class="stats-strip__num">{{.ThisMonth}}</span>
+    <span class="stats-strip__lbl">this month</span>
+  </div>
+  <div class="stats-strip__tile{{if gt .SessionStreak 1}} stats-strip__tile--hot{{end}}">
+    <span class="stats-strip__num">{{.SessionStreak}}</span>
+    <span class="stats-strip__lbl">{{if eq .SessionStreak 1}}session streak{{else}}sessions in a row{{end}}</span>
+  </div>
+</section>

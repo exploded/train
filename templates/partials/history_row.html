@@ -1,0 +1,21 @@
+{{- /* viewHistoryRow */ -}}
+<li class="history-row" id="history-row-{{.WorkoutID}}">
+  <button class="history-row__head js-history-toggle"
+          aria-expanded="false"
+          hx-get="/workout/{{.WorkoutID}}/expand"
+          hx-target="#history-row-{{.WorkoutID}} .history-row__body"
+          hx-swap="innerHTML"
+          hx-trigger="click once">
+    <span class="history-row__date">{{.Date}}</span>
+    {{if .Completed}}<span class="history-row__badge">Done</span>{{end}}
+    <span class="history-row__pills">
+      {{range .Pills}}
+        <span class="pill pill--{{.Status}}">
+          {{.Name}}{{if .Weight}} <b>{{.Weight}}</b>{{end}}
+        </span>
+      {{end}}
+    </span>
+    <span class="history-row__chev" aria-hidden="true">&rsaquo;</span>
+  </button>
+  <div class="history-row__body"></div>
+</li>

@@ -1,0 +1,15 @@
+{{- /* viewTodayCard */ -}}
+<section class="today-card today-card--{{.State}}">
+  <div class="today-card__top">
+    <span class="today-card__label">Today</span>
+    <span class="today-card__pill today-card__pill--{{.State}}">{{.StateText}}</span>
+  </div>
+  <div class="today-card__date">{{.Date}}</div>
+  {{if eq .State "completed"}}
+    <a class="today-card__btn today-card__btn--secondary" href="/workout">Review session</a>
+  {{else if eq .State "in_progress"}}
+    <a class="today-card__btn today-card__btn--primary" href="/workout">Continue</a>
+  {{else}}
+    <a class="today-card__btn today-card__btn--primary" href="/workout">Start session</a>
+  {{end}}
+</section>

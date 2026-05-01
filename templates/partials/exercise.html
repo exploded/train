@@ -1,0 +1,93 @@
+{{- /* viewExercise */ -}}
+<section class="exercise" id="exercise-{{.ID}}" data-kind="{{.Kind}}">
+  <header class="exercise__head">
+    <h2 class="exercise__name">{{.Name}}</h2>
+    {{if .IsCardio}}
+      <div class="exercise__detail">{{.Detail}}</div>
+    {{else}}
+      <div class="exercise__meta">
+        <span class="exercise__sets">{{.SetsXReps}}</span>
+        <span class="exercise__weight">{{.WeightDisp}} kg</span>
+        <button class="weight-btn weight-btn--minus"
+                hx-post="/exercise/{{.ID}}/weight"
+                hx-vals='{"delta":"-2.5"}'
+                hx-target="#exercise-{{.ID}}"
+                hx-swap="outerHTML"
+                aria-label="decrease weight">&minus;</button>
+        <button class="weight-btn weight-btn--plus"
+                hx-post="/exercise/{{.ID}}/weight"
+                hx-vals='{"delta":"2.5"}'
+                hx-target="#exercise-{{.ID}}"
+                hx-swap="outerHTML"
+                aria-label="increase weight">+</button>
+      </div>
+    {{end}}
+  </header>
+
+  {{if .IsBarbell}}
+    <div class="exercise__barbell">{{template "barbell.html" .}}</div>
+  {{end}}
+
+  {{if .IsCardio}}
+    {{if not .Locked}}
+      <div class="walk-config">
+        <div class="walk-row">
+          <span class="walk-row__label">Time</span>
+          <button class="weight-btn weight-btn--minus"
+                  hx-post="/exercise/{{.ID}}/walking-adjust"
+                  hx-vals='{"field":"duration","dir":"-1"}'
+                  hx-target="#exercise-{{.ID}}"
+                  hx-swap="outerHTML"
+                  aria-label="decrease duration">&minus;</button>
+          <span class="walk-row__value">{{.DurationMin}} min</span>
+          <button class="weight-btn weight-btn--plus"
+                  hx-post="/exercise/{{.ID}}/walking-adjust"
+                  hx-vals='{"field":"duration","dir":"1"}'
+                  hx-target="#exercise-{{.ID}}"
+                  hx-swap="outerHTML"
+                  aria-label="increase duration">+</button>
+        </div>
+        <div class="walk-row">
+          <span class="walk-row__label">Speed</span>
+          <button class="weight-btn weight-btn--minus"
+                  hx-post="/exercise/{{.ID}}/walking-adjust"
+                  hx-vals='{"field":"speed","dir":"-1"}'
+                  hx-target="#exercise-{{.ID}}"
+                  hx-swap="outerHTML"
+                  aria-label="decrease speed">&minus;</button>
+          <span class="walk-row__value">{{.SpeedDisp}} kph</span>
+          <button class="weight-btn weight-btn--plus"
+                  hx-post="/exercise/{{.ID}}/walking-adjust"
+                  hx-vals='{"field":"speed","dir":"1"}'
+                  hx-target="#exercise-{{.ID}}"
+                  hx-swap="outerHTML"
+                  aria-label="increase speed">+</button>
+        </div>
+        <div class="walk-row">
+          <span class="walk-row__label">Incline</span>
+          <button class="weight-btn weight-btn--minus"
+                  hx-post="/exercise/{{.ID}}/walking-adjust"
+                  hx-vals='{"field":"incline","dir":"-1"}'
+                  hx-target="#exercise-{{.ID}}"
+                  hx-swap="outerHTML"
+                  aria-label="decrease incline">&minus;</button>
+          <span class="walk-row__value">{{.InclineDisp}}</span>
+          <button class="weight-btn weight-btn--plus"
+                  hx-post="/exercise/{{.ID}}/walking-adjust"
+                  hx-vals='{"field":"incline","dir":"1"}'
+                  hx-target="#exercise-{{.ID}}"
+                  hx-swap="outerHTML"
+                  aria-label="increase incline">+</button>
+        </div>
+      </div>
+    {{end}}
+    <button class="walking{{if .WalkingDone}} walking--done{{end}}{{if .Locked}} walking--locked{{end}}"
+            {{if .Locked}}disabled{{else}}hx-post="/exercise/{{.ID}}/walking-done" hx-target="#exercise-{{.ID}}" hx-swap="outerHTML"{{end}}>
+      {{if .WalkingDone}}Done{{else}}Mark done{{end}}
+    </button>
+  {{else}}
+    <div class="circles">
+      {{range .Sets}}{{template "circle.html" .}}{{end}}
+    </div>
+  {{end}}
+</section>

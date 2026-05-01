@@ -1,0 +1,4 @@
+{{- /* viewSet (parent passes Locked separately if needed) */ -}}
+<button class="circle{{if .Tapped}} circle--tapped{{end}}{{if and .Tapped (not .Successful)}} circle--partial{{end}}{{if .Locked}} circle--locked{{end}}"
+        id="set-{{.ID}}"
+        {{if not .Locked}}hx-post="/sets/{{.ID}}/tap" hx-target="this" hx-swap="outerHTML" hx-disabled-elt="this"{{else}}disabled{{end}}>{{if .Tapped}}{{.ActualReps}}{{else}}{{.TargetReps}}{{end}}</button>

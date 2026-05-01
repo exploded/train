@@ -1,0 +1,4 @@
+# Force LF line endings on all text files. Shell scripts and systemd units
+# bound for the Linux server must not carry CRLF when edited on Windows.
+* text=auto eol=lf
+*.bat text eol=crlf

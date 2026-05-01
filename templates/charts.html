@@ -1,0 +1,57 @@
+{{- /* viewCharts */ -}}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{.ThemeMode}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="{{if eq .ThemeMode "dark"}}#000000{{else}}#0f172a{{end}}">
+<title>Charts &mdash; Train</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="page page--charts">
+<div class="too-wide"><p>Designed for iPhone &mdash; open on your phone.</p></div>
+
+<div class="phone">
+  <header class="topbar">
+    <a class="topbar__back" href="/" aria-label="back to home">&lsaquo; Back</a>
+    <div class="topbar__date">Charts</div>
+    <span class="topbar__action"></span>
+  </header>
+
+  <main class="charts">
+    {{range .Charts}}
+      <section class="chart">
+        <header class="chart__head">
+          <h2 class="chart__name">{{.Name}}</h2>
+          {{if .HasData}}<span class="chart__current">{{.WeightDisp}}{{with .Unit}} {{.}}{{end}}</span>{{end}}
+        </header>
+        {{if .HasData}}
+          <svg class="chart__svg" viewBox="0 0 340 140" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <line x1="36" y1="{{.YMaxY}}" x2="328" y2="{{.YMaxY}}" stroke="#e2e8f0" stroke-width="1"/>
+            <line x1="36" y1="{{.YMinY}}" x2="328" y2="{{.YMinY}}" stroke="#e2e8f0" stroke-width="1"/>
+            <text x="32" y="{{.YMaxY}}" text-anchor="end" dominant-baseline="middle" fill="#94a3b8" font-size="10">{{.MaxKgLabel}}</text>
+            <text x="32" y="{{.YMinY}}" text-anchor="end" dominant-baseline="middle" fill="#94a3b8" font-size="10">{{.MinKgLabel}}</text>
+            <polyline fill="none" stroke="#1d4ed8" stroke-width="2" points="{{.Polyline}}"/>
+            {{range .Points}}
+              <circle cx="{{.X}}" cy="{{.Y}}" r="4"
+                fill="{{if eq .Status "ok"}}#16a34a{{else if eq .Status "partial"}}#f59e0b{{else}}#cbd5e1{{end}}"
+                stroke="#0f172a" stroke-width="1"/>
+            {{end}}
+            <text x="36" y="135" fill="#94a3b8" font-size="10">{{.XFirstLabel}}</text>
+            <text x="328" y="135" text-anchor="end" fill="#94a3b8" font-size="10">{{.XLastLabel}}</text>
+          </svg>
+        {{else}}
+          <p class="chart__empty">No history yet.</p>
+        {{end}}
+      </section>
+    {{end}}
+  </main>
+
+  <div class="bottom-spacer"></div>
+</div>
+</body>
+</html>

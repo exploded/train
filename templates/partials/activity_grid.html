@@ -1,0 +1,12 @@
+{{- /* []viewActivityCell, oldest -> newest, length 30 */ -}}
+<section class="activity" aria-labelledby="activity-h">
+  <h2 id="activity-h" class="section-h">Last 30 days</h2>
+  <div class="activity__grid">
+    {{range .}}<span class="activity__cell activity__cell--{{.State}}" title="{{.Date}}"></span>{{end}}
+  </div>
+  <div class="activity__legend">
+    <span class="activity__cell activity__cell--rest"></span><span class="activity__legend-lbl">rest</span>
+    <span class="activity__cell activity__cell--partial"></span><span class="activity__legend-lbl">started</span>
+    <span class="activity__cell activity__cell--done"></span><span class="activity__legend-lbl">done</span>
+  </div>
+</section>

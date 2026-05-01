@@ -1,0 +1,33 @@
+# Binaries
+train
+*.exe
+*.test
+
+# Local environment
+.env
+.env.local
+
+# Local files
+.local/
+
+# Local database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.bak
+
+# IDE/editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Local-only one-shot tools
+scripts/import_stronglifts/

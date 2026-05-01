@@ -1,0 +1,62 @@
+{{- /* viewSettings */ -}}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{.ThemeMode}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="{{if eq .ThemeMode "dark"}}#000000{{else}}#0f172a{{end}}">
+<title>Settings</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="page page--settings">
+<div class="too-wide"><p>Designed for iPhone &mdash; open on your phone.</p></div>
+
+<div class="phone">
+  <header class="topbar">
+    <a class="topbar__back" href="/" aria-label="back to home">&lsaquo; Back</a>
+    <div class="topbar__date">Settings</div>
+    <span class="topbar__action"></span>
+  </header>
+
+  <main class="settings">
+    <section class="settings__section">
+      <h2 class="settings__title">Theme</h2>
+      <p class="settings__hint">Auto follows your phone&rsquo;s light/dark setting.</p>
+      <form class="theme-toggle" method="post" action="/settings/theme">
+        {{$m := .ThemeMode}}
+        <label class="theme-toggle__opt{{if eq $m "auto"}} theme-toggle__opt--on{{end}}">
+          <input type="radio" name="mode" value="auto"{{if eq $m "auto"}} checked{{end}}>
+          <span>Auto</span>
+        </label>
+        <label class="theme-toggle__opt{{if eq $m "light"}} theme-toggle__opt--on{{end}}">
+          <input type="radio" name="mode" value="light"{{if eq $m "light"}} checked{{end}}>
+          <span>Light</span>
+        </label>
+        <label class="theme-toggle__opt{{if eq $m "dark"}} theme-toggle__opt--on{{end}}">
+          <input type="radio" name="mode" value="dark"{{if eq $m "dark"}} checked{{end}}>
+          <span>Dark</span>
+        </label>
+        <button type="submit" class="theme-toggle__save">Save</button>
+      </form>
+    </section>
+
+    <section class="settings__section">
+      <h2 class="settings__title">Exercises in new workouts</h2>
+      <p class="settings__hint">Hidden exercises are skipped when today&rsquo;s workout is created. History is unaffected.</p>
+      <ul class="settings-list js-sortable">
+        {{range .Exercises}}{{template "settings_row.html" .}}{{end}}
+      </ul>
+    </section>
+  </main>
+
+  <div class="bottom-spacer"></div>
+</div>
+
+<script src="/static/htmx.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
