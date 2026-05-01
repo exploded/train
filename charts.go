@@ -150,9 +150,9 @@ func buildChartFor(ex db.Exercise, rows []db.ListWeightHistoryForExerciseRow) vi
 		if i > 0 {
 			polyBuf = append(polyBuf, ' ')
 		}
-		polyBuf = append(polyBuf, []byte(itoa(x))...)
+		polyBuf = append(polyBuf, strconv.Itoa(x)...)
 		polyBuf = append(polyBuf, ',')
-		polyBuf = append(polyBuf, []byte(itoa(y))...)
+		polyBuf = append(polyBuf, strconv.Itoa(y)...)
 	}
 
 	vc.Points = pts
@@ -166,29 +166,6 @@ func buildChartFor(ex db.Exercise, rows []db.ListWeightHistoryForExerciseRow) vi
 	vc.XLastLabel = niceShortDate(byWk[chronoIDs[len(chronoIDs)-1]].date)
 	vc.HasData = true
 	return vc
-}
-
-func itoa(n int) string {
-	// Avoid strconv import in hot path; small ints only.
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [16]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
 
 func niceShortDate(yyyymmdd string) string {
@@ -258,9 +235,9 @@ func buildSeriesChart(name, slug, unit string, points []seriesPoint, fmtValue fu
 		if i > 0 {
 			polyBuf = append(polyBuf, ' ')
 		}
-		polyBuf = append(polyBuf, []byte(itoa(x))...)
+		polyBuf = append(polyBuf, strconv.Itoa(x)...)
 		polyBuf = append(polyBuf, ',')
-		polyBuf = append(polyBuf, []byte(itoa(y))...)
+		polyBuf = append(polyBuf, strconv.Itoa(y)...)
 	}
 
 	vc.Points = pts
@@ -303,7 +280,7 @@ func handleCharts(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
 	exercises, err := queries.ListExercises(r.Context())
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "charts: list exercises", err)
 		return
 	}
 
@@ -342,8 +319,5 @@ func handleCharts(w http.ResponseWriter, r *http.Request) {
 		vc.Charts = append(vc.Charts, buildChartFor(ex, rows))
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "charts.html", vc); err != nil {
-		slog.Error("charts template", "error", err)
-	}
+	renderHTML(w, "charts.html", vc)
 }

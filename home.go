@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -127,8 +126,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 	exercises, err := queries.ListExercises(ctx)
 	if err != nil {
-		slog.Error("list exercises", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "home: list exercises", err)
 		return
 	}
 
@@ -150,8 +148,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 			StateText: "Not started",
 		}
 	case err != nil:
-		slog.Error("today workout", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "home: today workout", err)
 		return
 	default:
 		card := viewTodayCard{WorkoutID: wk.ID, Date: niceDate(wk.WorkoutDate)}
@@ -179,8 +176,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		UserID: user.ID, WorkoutDate: since,
 	})
 	if err != nil {
-		slog.Error("workouts since", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "home: workouts since", err)
 		return
 	}
 	vh.Stats = buildStats(ctx, user.ID, today, recentWks)
@@ -189,8 +185,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	// Working weights tile.
 	vh.Weights, err = buildWeights(ctx, user.ID, exercises)
 	if err != nil {
-		slog.Error("build weights", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "home: build weights", err)
 		return
 	}
 
@@ -199,8 +194,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	// filtered by loadHistoryRows).
 	rows, hasMore, err := loadHistoryRows(ctx, user.ID, exercises, 0, homeRecentLimit*2)
 	if err != nil {
-		slog.Error("load history", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "home: load history", err)
 		return
 	}
 	if len(rows) > homeRecentLimit {
@@ -209,11 +203,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	vh.Recent = rows
 	vh.HasMore = hasMore || len(rows) == homeRecentLimit
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "home.html", vh); err != nil {
-		slog.Error("home template", "error", err)
-	}
+	renderHTML(w, "home.html", vh)
 }
 
 // buildStats summarizes the user's recent workout cadence. recentWks must be
@@ -286,7 +276,7 @@ func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow) []view
 // buildWeights produces one row per visible exercise, with current working
 // weight and streak progress toward the next 2.5 kg bump.
 func buildWeights(ctx context.Context, userID int64, exercises []db.Exercise) ([]viewWeightRow, error) {
-	hidden, err := hiddenExerciseSet(ctx, userID)
+	hidden, err := hiddenExerciseSet(ctx, queries, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -433,12 +423,12 @@ func handleHistoryMore(w http.ResponseWriter, r *http.Request) {
 
 	exercises, err := queries.ListExercises(r.Context())
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "history more: list exercises", err)
 		return
 	}
 	rows, hasMore, err := loadHistoryRows(r.Context(), user.ID, exercises, offset, historyPageSize)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "history more: load rows", err)
 		return
 	}
 
@@ -447,11 +437,7 @@ func handleHistoryMore(w http.ResponseWriter, r *http.Request) {
 		NextOffset int
 		HasMore    bool
 	}{rows, offset + historyPageSize, hasMore}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "history_more.html", data); err != nil {
-		slog.Error("history_more template", "error", err)
-	}
+	renderHTML(w, "history_more.html", data)
 }
 
 // =============================================================================
@@ -465,9 +451,8 @@ type viewExpandedRow struct {
 
 func handleWorkoutExpand(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	wkID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.Error(w, "bad workout id", http.StatusBadRequest)
+	wkID, ok := pathInt64(w, r, "id", "workout id")
+	if !ok {
 		return
 	}
 	wk, err := queries.GetWorkoutByID(r.Context(), wkID)
@@ -478,12 +463,12 @@ func handleWorkoutExpand(w http.ResponseWriter, r *http.Request) {
 
 	exercises, err := queries.ListExercises(r.Context())
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "expand: list exercises", err)
 		return
 	}
 	allSets, err := queries.ListSetsForWorkout(r.Context(), wk.ID)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "expand: list sets", err)
 		return
 	}
 	setsByEx := make(map[int64][]db.Set)
@@ -512,11 +497,7 @@ func handleWorkoutExpand(w http.ResponseWriter, r *http.Request) {
 		}
 		row.Exercises = append(row.Exercises, ve)
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "history_expanded.html", row); err != nil {
-		slog.Error("history_expanded template", "error", err)
-	}
+	renderHTML(w, "history_expanded.html", row)
 }
 
 // =============================================================================
@@ -535,14 +516,12 @@ func handleHistoryPage(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
 	exercises, err := queries.ListExercises(r.Context())
 	if err != nil {
-		slog.Error("history page: list exercises", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "history page: list exercises", err)
 		return
 	}
 	rows, hasMore, err := loadHistoryRows(r.Context(), user.ID, exercises, 0, historyPageSize)
 	if err != nil {
-		slog.Error("history page: load rows", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "history page: load rows", err)
 		return
 	}
 	vh := viewHistory{
@@ -552,8 +531,5 @@ func handleHistoryPage(w http.ResponseWriter, r *http.Request) {
 		HasMore:    hasMore,
 		NextOffset: historyPageSize,
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "history.html", vh); err != nil {
-		slog.Error("history template", "error", err)
-	}
+	renderHTML(w, "history.html", vh)
 }

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -19,9 +18,8 @@ import (
 
 func handleWorkoutFinish(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	wkID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.Error(w, "bad workout id", http.StatusBadRequest)
+	wkID, ok := pathInt64(w, r, "id", "workout id")
+	if !ok {
 		return
 	}
 	wk, err := queries.GetWorkoutByID(r.Context(), wkID)
@@ -36,7 +34,7 @@ func handleWorkoutFinish(w http.ResponseWriter, r *http.Request) {
 			ID:          wkID,
 			UserID:      user.ID,
 		}); err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			serverError(w, "finish workout", err)
 			return
 		}
 	}
@@ -45,9 +43,8 @@ func handleWorkoutFinish(w http.ResponseWriter, r *http.Request) {
 
 func handleWorkoutUnfinish(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	wkID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.Error(w, "bad workout id", http.StatusBadRequest)
+	wkID, ok := pathInt64(w, r, "id", "workout id")
+	if !ok {
 		return
 	}
 	if err := queries.UnfinishWorkout(r.Context(), db.UnfinishWorkoutParams{
@@ -55,7 +52,7 @@ func handleWorkoutUnfinish(w http.ResponseWriter, r *http.Request) {
 		UserID:      user.ID,
 		WorkoutDate: todayInAppTZ(),
 	}); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "unfinish workout", err)
 		return
 	}
 	http.Redirect(w, r, "/workout", http.StatusSeeOther)
@@ -127,6 +124,16 @@ func formatKg(kg float64) string {
 	return strconv.FormatFloat(kg, 'f', -1, 64)
 }
 
+func clampInt64(v, lo, hi int64) int64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
 // =============================================================================
 // Walking helpers (cardio adjustable parameters)
 // =============================================================================
@@ -174,8 +181,8 @@ func loadOrDefaultWalking(ctx context.Context, workoutID int64) db.WalkingSessio
 // seedWalkingForNewWorkout creates today's walking_sessions row using the
 // user's most recent prior session as the template, or hardcoded defaults
 // if there is no prior session.
-func seedWalkingForNewWorkout(ctx context.Context, userID int64, workoutID int64, today string) error {
-	prev, err := queries.GetLastUserWalkingSession(ctx, db.GetLastUserWalkingSessionParams{
+func seedWalkingForNewWorkout(ctx context.Context, q *db.Queries, userID int64, workoutID int64, today string) error {
+	prev, err := q.GetLastUserWalkingSession(ctx, db.GetLastUserWalkingSessionParams{
 		UserID: userID, WorkoutDate: today,
 	})
 	duration := int64(walkingDefaultDurationMin)
@@ -186,7 +193,7 @@ func seedWalkingForNewWorkout(ctx context.Context, userID int64, workoutID int64
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	return queries.UpsertWalkingSession(ctx, db.UpsertWalkingSessionParams{
+	return q.UpsertWalkingSession(ctx, db.UpsertWalkingSessionParams{
 		WorkoutID:   workoutID,
 		DurationMin: duration,
 		SpeedX10:    speed,
@@ -208,28 +215,24 @@ func handleWorkout(w http.ResponseWriter, r *http.Request) {
 	today := todayInAppTZ()
 	workout, err := getOrCreateTodaysWorkout(r.Context(), user.ID, today)
 	if err != nil {
-		slog.Error("get/create workout", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "get/create workout", err)
 		return
 	}
 
 	vw, err := buildWorkoutView(r.Context(), user, workout)
 	if err != nil {
-		slog.Error("build workout view", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "build workout view", err)
 		return
 	}
 	vw.ThemeMode = themeFromRequest(r)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "workout.html", vw); err != nil {
-		slog.Error("execute workout template", "error", err)
-	}
+	renderHTML(w, "workout.html", vw)
 }
 
 // getOrCreateTodaysWorkout: idempotent. On first call of the day, runs the
 // auto-progression check using the previous workout's results, then creates
 // the workout row plus its sets at each user's current per-exercise weight.
+// The create path runs in a single transaction so a partial failure can't
+// leave a workout shell with missing sets.
 func getOrCreateTodaysWorkout(ctx context.Context, userID int64, today string) (db.Workout, error) {
 	wk, err := queries.GetWorkoutByDate(ctx, db.GetWorkoutByDateParams{
 		UserID: userID, WorkoutDate: today,
@@ -241,32 +244,35 @@ func getOrCreateTodaysWorkout(ctx context.Context, userID int64, today string) (
 		return db.Workout{}, err
 	}
 
-	// New day: evaluate progression from the prior workout (if any).
-	if err := runProgressionForUser(ctx, queries, userID, today); err != nil {
+	tx, err := store.BeginTx(ctx, nil)
+	if err != nil {
+		return db.Workout{}, err
+	}
+	defer tx.Rollback()
+	q := queries.WithTx(tx)
+
+	if err := runProgressionForUser(ctx, q, userID, today); err != nil {
 		return db.Workout{}, fmt.Errorf("progression: %w", err)
 	}
 
-	// Create workout shell.
 	now := time.Now().UTC().Format(time.RFC3339)
-	if err := queries.CreateWorkout(ctx, db.CreateWorkoutParams{
+	if err := q.CreateWorkout(ctx, db.CreateWorkoutParams{
 		UserID: userID, WorkoutDate: today, CreatedAt: now,
 	}); err != nil {
 		return db.Workout{}, err
 	}
-	wk, err = queries.GetWorkoutByDate(ctx, db.GetWorkoutByDateParams{
+	wk, err = q.GetWorkoutByDate(ctx, db.GetWorkoutByDateParams{
 		UserID: userID, WorkoutDate: today,
 	})
 	if err != nil {
 		return db.Workout{}, err
 	}
 
-	// Create per-exercise sets at the user's current weight, skipping any
-	// exercises the user has hidden from new workouts.
-	exercises, err := queries.ListExercises(ctx)
+	exercises, err := q.ListExercises(ctx)
 	if err != nil {
 		return db.Workout{}, err
 	}
-	hidden, err := hiddenExerciseSet(ctx, userID)
+	hidden, err := hiddenExerciseSet(ctx, q, userID)
 	if err != nil {
 		return db.Workout{}, err
 	}
@@ -274,12 +280,12 @@ func getOrCreateTodaysWorkout(ctx context.Context, userID int64, today string) (
 		if hidden[ex.ID] {
 			continue
 		}
-		weight, err := userWeightFor(ctx, userID, ex)
+		weight, err := userWeightFor(ctx, q, userID, ex)
 		if err != nil {
 			return db.Workout{}, err
 		}
 		for i := int64(1); i <= ex.DefaultSets; i++ {
-			if err := queries.CreateSet(ctx, db.CreateSetParams{
+			if err := q.CreateSet(ctx, db.CreateSetParams{
 				WorkoutID:  wk.ID,
 				ExerciseID: ex.ID,
 				SetIndex:   i,
@@ -290,17 +296,20 @@ func getOrCreateTodaysWorkout(ctx context.Context, userID int64, today string) (
 			}
 		}
 		if ex.Kind == "cardio" {
-			if err := seedWalkingForNewWorkout(ctx, userID, wk.ID, today); err != nil {
+			if err := seedWalkingForNewWorkout(ctx, q, userID, wk.ID, today); err != nil {
 				return db.Workout{}, err
 			}
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return db.Workout{}, err
 	}
 	return wk, nil
 }
 
 // hiddenExerciseSet returns the user's hide list as a set keyed by exercise_id.
-func hiddenExerciseSet(ctx context.Context, userID int64) (map[int64]bool, error) {
-	ids, err := queries.ListHiddenExerciseIDs(ctx, userID)
+func hiddenExerciseSet(ctx context.Context, q *db.Queries, userID int64) (map[int64]bool, error) {
+	ids, err := q.ListHiddenExerciseIDs(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,8 +331,8 @@ func anySetTapped(sets []db.Set) bool {
 
 // userWeightFor returns the user's current working weight for an exercise,
 // creating the user_exercise_weight row at the exercise default if missing.
-func userWeightFor(ctx context.Context, userID int64, ex db.Exercise) (float64, error) {
-	uew, err := queries.GetUserExerciseWeight(ctx, db.GetUserExerciseWeightParams{
+func userWeightFor(ctx context.Context, q *db.Queries, userID int64, ex db.Exercise) (float64, error) {
+	uew, err := q.GetUserExerciseWeight(ctx, db.GetUserExerciseWeightParams{
 		UserID: userID, ExerciseID: ex.ID,
 	})
 	if err == nil {
@@ -333,7 +342,7 @@ func userWeightFor(ctx context.Context, userID int64, ex db.Exercise) (float64, 
 		return 0, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	if err := queries.UpsertUserExerciseWeight(ctx, db.UpsertUserExerciseWeightParams{
+	if err := q.UpsertUserExerciseWeight(ctx, db.UpsertUserExerciseWeightParams{
 		UserID: userID, ExerciseID: ex.ID,
 		WeightKg: ex.DefaultWeightKg, SuccessStreak: 0,
 		UpdatedAt: now,
@@ -356,7 +365,7 @@ func buildWorkoutView(ctx context.Context, user *currentUser, wk db.Workout) (vi
 	for _, s := range allSets {
 		setsByExID[s.ExerciseID] = append(setsByExID[s.ExerciseID], s)
 	}
-	hidden, err := hiddenExerciseSet(ctx, user.ID)
+	hidden, err := hiddenExerciseSet(ctx, queries, user.ID)
 	if err != nil {
 		return viewWorkout{}, err
 	}
@@ -489,10 +498,8 @@ func editableTodayWorkout(w http.ResponseWriter, r *http.Request, userID int64) 
 
 func handleSetTap(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "bad set id", http.StatusBadRequest)
+	id, ok := pathInt64(w, r, "id", "set id")
+	if !ok {
 		return
 	}
 
@@ -529,8 +536,7 @@ func handleSetTap(w http.ResponseWriter, r *http.Request) {
 	if err := queries.UpdateSetActualReps(r.Context(), db.UpdateSetActualRepsParams{
 		ActualReps: sql.NullInt64{Int64: next, Valid: true}, ID: id,
 	}); err != nil {
-		slog.Error("update set", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "update set", err)
 		return
 	}
 
@@ -545,10 +551,7 @@ func handleSetTap(w http.ResponseWriter, r *http.Request) {
 		TargetReps: s.TargetReps,
 		ActualReps: sql.NullInt64{Int64: next, Valid: true},
 	})
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "circle.html", view); err != nil {
-		slog.Error("circle template", "error", err)
-	}
+	renderHTML(w, "circle.html", view)
 }
 
 // =============================================================================
@@ -557,10 +560,8 @@ func handleSetTap(w http.ResponseWriter, r *http.Request) {
 
 func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	idStr := r.PathValue("id")
-	exID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "bad exercise id", http.StatusBadRequest)
+	exID, ok := pathInt64(w, r, "id", "exercise id")
+	if !ok {
 		return
 	}
 	ex, err := queries.GetExerciseByID(r.Context(), exID)
@@ -576,7 +577,7 @@ func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 		WorkoutID: wk.ID, ExerciseID: exID,
 	})
 	if err != nil || len(sets) == 0 {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "walking done: list sets", err)
 		return
 	}
 	s := sets[0]
@@ -590,7 +591,7 @@ func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 	if err := queries.UpdateSetActualReps(r.Context(), db.UpdateSetActualRepsParams{
 		ActualReps: next, ID: s.ID,
 	}); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "walking done: update set", err)
 		return
 	}
 
@@ -600,10 +601,7 @@ func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 		SetIndex: s.SetIndex, TargetReps: s.TargetReps,
 		ActualReps: next, WeightKg: s.WeightKg,
 	}}, &walking)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "exercise.html", ve); err != nil {
-		slog.Error("exercise template", "error", err)
-	}
+	renderHTML(w, "exercise.html", ve)
 }
 
 // =============================================================================
@@ -612,10 +610,8 @@ func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 
 func handleWeightChange(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	idStr := r.PathValue("id")
-	exID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "bad exercise id", http.StatusBadRequest)
+	exID, ok := pathInt64(w, r, "id", "exercise id")
+	if !ok {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -647,9 +643,9 @@ func handleWeightChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	current, err := userWeightFor(r.Context(), user.ID, ex)
+	current, err := userWeightFor(r.Context(), queries, user.ID, ex)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "weight change: lookup", err)
 		return
 	}
 	next := current + delta
@@ -669,7 +665,7 @@ func handleWeightChange(w http.ResponseWriter, r *http.Request) {
 		WeightKg: next, UpdatedAt: now,
 		UserID: user.ID, ExerciseID: exID,
 	}); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "weight change: update", err)
 		return
 	}
 
@@ -683,11 +679,7 @@ func handleWeightChange(w http.ResponseWriter, r *http.Request) {
 		WorkoutID: wk.ID, ExerciseID: exID,
 	})
 	ve := buildExerciseView(ex, sets, nil)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "exercise.html", ve); err != nil {
-		slog.Error("exercise template", "error", err)
-	}
+	renderHTML(w, "exercise.html", ve)
 }
 
 // =============================================================================
@@ -696,9 +688,8 @@ func handleWeightChange(w http.ResponseWriter, r *http.Request) {
 
 func handleWalkingAdjust(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	exID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.Error(w, "bad exercise id", http.StatusBadRequest)
+	exID, ok := pathInt64(w, r, "id", "exercise id")
+	if !ok {
 		return
 	}
 	ex, err := queries.GetExerciseByID(r.Context(), exID)
@@ -725,29 +716,11 @@ func handleWalkingAdjust(w http.ResponseWriter, r *http.Request) {
 	ws := loadOrDefaultWalking(r.Context(), wk.ID)
 	switch field {
 	case "duration":
-		ws.DurationMin += int64(dir) * walkingDurationStep
-		if ws.DurationMin < 0 {
-			ws.DurationMin = 0
-		}
-		if ws.DurationMin > walkingMaxDurationMin {
-			ws.DurationMin = walkingMaxDurationMin
-		}
+		ws.DurationMin = clampInt64(ws.DurationMin+int64(dir)*walkingDurationStep, 0, walkingMaxDurationMin)
 	case "speed":
-		ws.SpeedX10 += int64(dir) * walkingSpeedStepX10
-		if ws.SpeedX10 < 0 {
-			ws.SpeedX10 = 0
-		}
-		if ws.SpeedX10 > walkingMaxSpeedX10 {
-			ws.SpeedX10 = walkingMaxSpeedX10
-		}
+		ws.SpeedX10 = clampInt64(ws.SpeedX10+int64(dir)*walkingSpeedStepX10, 0, walkingMaxSpeedX10)
 	case "incline":
-		ws.InclineX10 += int64(dir) * walkingInclineStepX10
-		if ws.InclineX10 < 0 {
-			ws.InclineX10 = 0
-		}
-		if ws.InclineX10 > walkingMaxInclineX10 {
-			ws.InclineX10 = walkingMaxInclineX10
-		}
+		ws.InclineX10 = clampInt64(ws.InclineX10+int64(dir)*walkingInclineStepX10, 0, walkingMaxInclineX10)
 	default:
 		http.Error(w, "bad field", http.StatusBadRequest)
 		return
@@ -759,8 +732,7 @@ func handleWalkingAdjust(w http.ResponseWriter, r *http.Request) {
 		SpeedX10:    ws.SpeedX10,
 		InclineX10:  ws.InclineX10,
 	}); err != nil {
-		slog.Error("upsert walking session", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "upsert walking session", err)
 		return
 	}
 
@@ -768,9 +740,5 @@ func handleWalkingAdjust(w http.ResponseWriter, r *http.Request) {
 		WorkoutID: wk.ID, ExerciseID: exID,
 	})
 	ve := buildExerciseView(ex, sets, &ws)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "exercise.html", ve); err != nil {
-		slog.Error("exercise template", "error", err)
-	}
+	renderHTML(w, "exercise.html", ve)
 }

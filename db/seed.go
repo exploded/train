@@ -1,6 +1,9 @@
 package db
 
-import "context"
+import (
+	"context"
+	"database/sql"
+)
 
 // SeededExercise is the canonical fixed exercise list. Modifying these here
 // will propagate to existing databases on next startup via UpsertExercise
@@ -20,11 +23,17 @@ var SeededExercises = []UpsertExerciseParams{
 	{Slug: "pullups", Name: "Pullups", Kind: "dumbbell", DefaultSets: 3, DefaultReps: 5, DefaultWeightKg: 0, SortOrder: 11},
 }
 
-func SeedExercises(ctx context.Context, q *Queries) error {
+func SeedExercises(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := New(tx)
 	for _, ex := range SeededExercises {
 		if err := q.UpsertExercise(ctx, ex); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }

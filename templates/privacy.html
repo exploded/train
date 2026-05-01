@@ -6,11 +6,11 @@
 <title>Privacy &mdash; Train</title>
 <meta name="description" content="What Train collects, where it lives, and what it doesn't do.">
 <meta name="theme-color" content="#0f172a">
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}">
 <link rel="alternate icon" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/static/favicon.svg">
-<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
-<link rel="stylesheet" href="/static/landing.css">
+<link rel="apple-touch-icon" href="{{asset "favicon.svg"}}">
+<link rel="mask-icon" href="{{asset "favicon.svg"}}" color="#0f172a">
+<link rel="stylesheet" href="{{asset "landing.css"}}">
 </head>
 <body class="lp">
 
@@ -41,30 +41,41 @@
   <p class="updated">Last updated 1 May 2026.</p>
 
   <p>
-    Train is a one-person workout tracker. The shorter this page is, the more
-    accurate it is &mdash; here's the whole picture.
+    The shorter this page is, the more accurate it is &mdash; here's the
+    whole picture.
   </p>
 
   <h2>What we collect</h2>
   <ul>
-    <li>Your Google account <b>email and name</b>, via Sign in with Google. We use the email to identify your account; the name is shown on the settings page.</li>
+    <li>Your Google account <b>email and name</b>, via Sign in with Google. The email identifies your account; the name is shown on the settings page.</li>
     <li>The <b>workouts you log</b> &mdash; sets, reps, weights, exercise preferences, timestamps, and the dark/light theme you've chosen.</li>
-    <li>If you use the <b>contact form</b>: whatever message you type, the optional reply email you provide, and your IP address (used for rate-limiting submissions). The message is delivered to me by email; nothing about contact submissions is stored in the app database.</li>
+    <li>If you use the <b>contact form</b>: whatever message you type, the optional reply email you provide, and your IP address (used for rate-limiting submissions). The message is delivered by email; nothing about contact submissions is stored in the app database.</li>
+    <li><b>Basic request metadata</b> &mdash; IP address, browser, and the page you requested &mdash; is seen by the network provider that fronts the site (see "Who else sees traffic" below).</li>
   </ul>
 
   <h2>Where it lives</h2>
   <p>
-    All of it sits in a SQLite database on a single small server in Australia.
-    There's no cloud data warehouse, no third-party analytics, no ad network,
-    no tracking pixels. Backups are taken on the same server.
+    All of your account and workout data sits in a SQLite database on a small
+    server in Australia. There's no cloud data warehouse and no advertising
+    network. Backups are taken on the same server.
+  </p>
+
+  <h2>Who else sees traffic</h2>
+  <p>
+    The site sits behind a content delivery and security network. That
+    provider terminates TLS, blocks abusive traffic, and produces aggregated,
+    privacy-respecting traffic statistics (page views, country-level
+    geography, browser breakdown). It does not set advertising cookies and
+    does not build a cross-site profile of you. A small first-party
+    measurement script runs in the browser to feed those aggregated stats;
+    no personal account data is sent to it.
   </p>
 
   <h2>What we don't do</h2>
   <ul>
-    <li>No analytics or tracking of any kind.</li>
-    <li>No advertising.</li>
-    <li>No selling, sharing, or transferring your data to anyone else.</li>
-    <li>No reading your data ourselves except to fix bugs you've reported.</li>
+    <li>No advertising and no ad-network trackers.</li>
+    <li>No selling, sharing, or transferring your account or workout data to anyone else.</li>
+    <li>No reading your data except to fix bugs you've reported.</li>
   </ul>
 
   <h2>Cookies</h2>
@@ -78,7 +89,9 @@
   <p>
     Email <a href="mailto:james67@gmail.com">james67@gmail.com</a> asking for
     deletion and your account and every workout under it will be removed,
-    usually within a day or two.
+    usually within a day or two. Aggregated traffic statistics held by the
+    network provider can't be tied back to your account and aren't subject
+    to the same request.
   </p>
 
   <h2>Changes</h2>

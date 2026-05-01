@@ -29,14 +29,12 @@ func handleSettings(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
 	exercises, err := queries.ListExercises(r.Context())
 	if err != nil {
-		slog.Error("settings: list exercises", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "settings: list exercises", err)
 		return
 	}
-	hidden, err := hiddenExerciseSet(r.Context(), user.ID)
+	hidden, err := hiddenExerciseSet(r.Context(), queries, user.ID)
 	if err != nil {
-		slog.Error("settings: list hidden", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "settings: list hidden", err)
 		return
 	}
 	vs := viewSettings{
@@ -48,19 +46,15 @@ func handleSettings(w http.ResponseWriter, r *http.Request) {
 			ID: ex.ID, Name: ex.Name, Hidden: hidden[ex.ID],
 		})
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "settings.html", vs); err != nil {
-		slog.Error("settings template", "error", err)
-	}
+	renderHTML(w, "settings.html", vs)
 }
 
 // handleSettingsToggle flips visibility for one exercise. Renders a single
 // row partial back so HTMX can swap it in place.
 func handleSettingsToggle(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	exID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.Error(w, "bad exercise id", http.StatusBadRequest)
+	exID, ok := pathInt64(w, r, "id", "exercise id")
+	if !ok {
 		return
 	}
 	ex, err := queries.GetExerciseByID(r.Context(), exID)
@@ -69,9 +63,9 @@ func handleSettingsToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hidden, err := hiddenExerciseSet(r.Context(), user.ID)
+	hidden, err := hiddenExerciseSet(r.Context(), queries, user.ID)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "settings toggle: list hidden", err)
 		return
 	}
 	wasHidden := hidden[exID]
@@ -79,23 +73,19 @@ func handleSettingsToggle(w http.ResponseWriter, r *http.Request) {
 		if err := queries.UnhideExercise(r.Context(), db.UnhideExerciseParams{
 			UserID: user.ID, ExerciseID: exID,
 		}); err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			serverError(w, "settings toggle: unhide", err)
 			return
 		}
 	} else {
 		if err := queries.HideExercise(r.Context(), db.HideExerciseParams{
 			UserID: user.ID, ExerciseID: exID,
 		}); err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			serverError(w, "settings toggle: hide", err)
 			return
 		}
 	}
 
-	row := viewSettingsRow{ID: ex.ID, Name: ex.Name, Hidden: !wasHidden}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, "settings_row.html", row); err != nil {
-		slog.Error("settings_row template", "error", err)
-	}
+	renderHTML(w, "settings_row.html", viewSettingsRow{ID: ex.ID, Name: ex.Name, Hidden: !wasHidden})
 }
 
 // handleSettingsReorder accepts a comma-separated list of exercise IDs in
@@ -127,8 +117,7 @@ func handleSettingsReorder(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := store.BeginTx(r.Context(), nil)
 	if err != nil {
-		slog.Error("reorder begin tx", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "reorder begin tx", err)
 		return
 	}
 	defer tx.Rollback()
@@ -143,8 +132,7 @@ func handleSettingsReorder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		slog.Error("reorder commit", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "reorder commit", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

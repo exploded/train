@@ -6,11 +6,11 @@
 <title>Contact &mdash; Train</title>
 <meta name="description" content="Send a message to the person who runs Train.">
 <meta name="theme-color" content="#0f172a">
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}">
 <link rel="alternate icon" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/static/favicon.svg">
-<link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
-<link rel="stylesheet" href="/static/landing.css">
+<link rel="apple-touch-icon" href="{{asset "favicon.svg"}}">
+<link rel="mask-icon" href="{{asset "favicon.svg"}}" color="#0f172a">
+<link rel="stylesheet" href="{{asset "landing.css"}}">
 </head>
 <body class="lp">
 
@@ -40,9 +40,8 @@
   <h1>Contact</h1>
 
   <p>
-    Train is built and run by one person. Send a message below &mdash; bug
-    reports, feature requests, account-deletion requests, data exports, or
-    just hi.
+    Send a message below &mdash; bug reports, feature requests,
+    account-deletion requests, data exports, or just hi.
   </p>
 
   {{if .Sent}}

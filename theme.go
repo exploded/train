@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -45,7 +44,7 @@ func handleSetTheme(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  time.Now().Add(themeTTL),
 		HttpOnly: false,
-		Secure:   r.TLS != nil || os.Getenv("PROD") == "True",
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)

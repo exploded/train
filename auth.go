@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -87,17 +88,15 @@ func signState(nonce string) string {
 }
 
 func verifyState(token string) (string, bool) {
-	for i := len(token) - 1; i >= 0; i-- {
-		if token[i] == '.' {
-			nonce := token[:i]
-			want := signState(nonce)
-			if hmac.Equal([]byte(want), []byte(token)) {
-				return nonce, true
-			}
-			return "", false
-		}
+	i := strings.LastIndexByte(token, '.')
+	if i < 0 {
+		return "", false
 	}
-	return "", false
+	nonce := token[:i]
+	if !hmac.Equal([]byte(signState(nonce)), []byte(token)) {
+		return "", false
+	}
+	return nonce, true
 }
 
 func randHex(n int) (string, error) {
@@ -109,36 +108,22 @@ func randHex(n int) (string, error) {
 }
 
 func handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := struct{ ThemeMode string }{ThemeMode: themeFromRequest(r)}
-	if err := templates.ExecuteTemplate(w, "login.html", data); err != nil {
-		slog.Error("login template", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
-}
-
-func renderMarketingPage(w http.ResponseWriter, name string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ExecuteTemplate(w, name, nil); err != nil {
-		slog.Error("marketing template", "name", name, "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+	renderHTML(w, "login.html", struct{ ThemeMode string }{ThemeMode: themeFromRequest(r)})
 }
 
 func handlePrivacyPage(w http.ResponseWriter, r *http.Request) {
-	renderMarketingPage(w, "privacy.html")
+	renderHTML(w, "privacy.html", nil)
 }
 
 func handleTermsPage(w http.ResponseWriter, r *http.Request) {
-	renderMarketingPage(w, "terms.html")
+	renderHTML(w, "terms.html", nil)
 }
 
 func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	// Local-dev shortcut: skip Google entirely, log in as DEV_USER_EMAIL.
 	if oauthCfg.devEmail != "" {
 		if err := loginDevUser(r.Context(), w); err != nil {
-			slog.Error("dev login", "error", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			serverError(w, "dev login", err)
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -163,7 +148,7 @@ func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/auth/google/callback",
 		Expires:  time.Now().Add(stateTTL),
 		HttpOnly: true,
-		Secure:   r.TLS != nil || os.Getenv("PROD") == "True",
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -231,17 +216,31 @@ func handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, err := upsertUser(r.Context(), claims.Sub, claims.Email, claims.Name)
 	if err != nil {
-		slog.Error("upsert user", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		serverError(w, "upsert user", err)
 		return
 	}
-	if err := issueSessionCookie(r.Context(), w, user.ID, r.TLS != nil || os.Getenv("PROD") == "True"); err != nil {
-		slog.Error("issue session", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	if err := issueSessionCookie(r.Context(), w, user.ID, isSecureRequest(r)); err != nil {
+		serverError(w, "issue session", err)
 		return
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// cleanupExpiredSessions purges expired session rows once an hour. Without
+// this they accumulate forever — login issues a new row each time and only
+// `/auth/logout` ever deletes anything.
+func cleanupExpiredSessions() {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := queries.DeleteExpiredSessions(ctx, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			slog.Warn("cleanup expired sessions", "error", err)
+		}
+		cancel()
+		<-t.C
+	}
 }
 
 func handleAuthLogout(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +253,7 @@ func handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   r.TLS != nil || os.Getenv("PROD") == "True",
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)

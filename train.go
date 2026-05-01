@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -10,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -27,13 +31,47 @@ var (
 	// Australia/Sydney by default; overridden by APP_TIMEZONE.
 	appLocation *time.Location
 
+	// Set once in main; read from cookie-issuing paths to decide Secure.
+	isProd bool
+
 	// OAuth + session config (populated in main).
 	oauthCfg oauthConfig
 )
 
-func init() {
+// assetVersions maps a static file's basename ("landing.css") to a short
+// content hash. Static assets are served with Cache-Control: immutable, so
+// the URL itself must change whenever the file changes; templates call
+// {{asset "..."}} to get a hashed URL like /static/landing.css?v=abcd1234.
+var assetVersions = map[string]string{}
+
+func loadAssetVersions() {
+	matches, err := filepath.Glob("static/*")
+	if err != nil {
+		slog.Warn("asset glob failed", "error", err)
+		return
+	}
+	for _, p := range matches {
+		buf, err := os.ReadFile(p)
+		if err != nil {
+			slog.Warn("asset read failed", "path", p, "error", err)
+			continue
+		}
+		sum := sha256.Sum256(buf)
+		assetVersions[filepath.Base(p)] = hex.EncodeToString(sum[:])[:10]
+	}
+}
+
+func assetURL(name string) string {
+	if v, ok := assetVersions[name]; ok {
+		return "/static/" + name + "?v=" + v
+	}
+	return "/static/" + name
+}
+
+func loadTemplates() {
+	funcs := template.FuncMap{"asset": assetURL}
 	var err error
-	templates, err = template.ParseGlob("templates/*.html")
+	templates, err = template.New("").Funcs(funcs).ParseGlob("templates/*.html")
 	if err != nil {
 		panic("failed to parse templates: " + err.Error())
 	}
@@ -91,12 +129,42 @@ func (rl *rateLimiter) allow(ip string) bool {
 	return v.count <= rl.rate
 }
 
+func clientIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+func isSecureRequest(r *http.Request) bool {
+	return r.TLS != nil || isProd
+}
+
+func pathInt64(w http.ResponseWriter, r *http.Request, name, label string) (int64, bool) {
+	v, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	if err != nil {
+		http.Error(w, "bad "+label, http.StatusBadRequest)
+		return 0, false
+	}
+	return v, true
+}
+
+func serverError(w http.ResponseWriter, op string, err error) {
+	slog.Error(op, "error", err)
+	http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+}
+
+func renderHTML(w http.ResponseWriter, name string, data any) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.ExecuteTemplate(w, name, data); err != nil {
+		slog.Error("template", "name", name, "error", err)
+	}
+}
+
 func rateLimit(limiter *rateLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			ip = r.RemoteAddr
-		}
+		ip := clientIP(r)
 		if !limiter.allow(ip) {
 			slog.Warn("rate limit exceeded", "ip", ip)
 			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
@@ -122,11 +190,17 @@ func securityHeaders(isProd bool, next http.Handler) http.Handler {
 		if isProd {
 			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		}
-		// Tight CSP: only self for everything. HTMX is vendored, no inline
-		// scripts, no third-party origins. Inline styles allowed because the
-		// barbell SVG sets fill via the style attribute.
+		// Tight CSP: only self for everything except the Cloudflare Web
+		// Analytics beacon, which Cloudflare auto-injects when proxied.
+		// HTMX is vendored, no inline scripts. Inline styles allowed because
+		// the barbell SVG sets fill via the style attribute.
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+			"default-src 'self'; "+
+				"script-src 'self' static.cloudflareinsights.com; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data:; "+
+				"connect-src 'self' cloudflareinsights.com; "+
+				"frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -210,7 +284,7 @@ func handle404(w http.ResponseWriter, r *http.Request) {
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
-	flgProduction := os.Getenv("PROD") == "True"
+	isProd = os.Getenv("PROD") == "True"
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -245,7 +319,7 @@ func main() {
 	}
 	queries = db.New(store)
 
-	if err := db.SeedExercises(context.Background(), queries); err != nil {
+	if err := db.SeedExercises(context.Background(), store); err != nil {
 		slog.Error("seed exercises", "error", err)
 		os.Exit(1)
 	}
@@ -254,9 +328,14 @@ func main() {
 		slog.Warn("oauth init", "error", err, "impact", "/auth/login will fail until env is fixed")
 	}
 
-	slog.Info("starting", "prod", flgProduction, "port", port, "tz", appLocation.String(), "db", dbPath)
+	go cleanupExpiredSessions()
 
-	srv := makeHTTPServer(flgProduction)
+	loadAssetVersions()
+	loadTemplates()
+
+	slog.Info("starting", "prod", isProd, "port", port, "tz", appLocation.String(), "db", dbPath)
+
+	srv := makeHTTPServer(isProd)
 	srv.Addr = ":" + port
 
 	go func() {

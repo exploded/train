@@ -1,6 +1,7 @@
 # Binaries
 train
 *.exe
+*.exe~
 *.test
 
 # Local environment
