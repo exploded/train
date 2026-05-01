@@ -1,23 +1,386 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="{{.ThemeMode}}">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sign in - Train</title>
+<title>Train &mdash; the barbell tracker that bumps your weights for you</title>
+<meta name="description" content="A no-fluff iPhone barbell tracker. Tap reps as you lift, hit five clean sessions in a row, and Train auto-bumps the weight. Charts, streaks, activity grid &mdash; built for the gym, not the App Store.">
+<meta name="theme-color" content="#0f172a">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="alternate icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/static/favicon.svg">
 <link rel="mask-icon" href="/static/favicon.svg" color="#0f172a">
-<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/landing.css">
 </head>
-<body class="page page--login">
-<div class="phone phone--center">
-  <h1 class="brand">Train</h1>
-  <p class="brand__tag">barbell weight tracker</p>
-  <a class="google-btn" href="/auth/login">
-    <span class="google-btn__g">G</span>
-    <span>Sign in with Google</span>
-  </a>
+<body class="lp">
+
+<header class="lp-nav">
+  <div class="lp-nav__inner">
+    <a href="/" class="lp-nav__brand">
+      <svg class="lp-nav__logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="12" fill="#0f172a"/>
+        <rect x="6" y="29" width="52" height="6" fill="#94a3b8"/>
+        <rect x="8" y="22" width="6" height="20" fill="#475569"/>
+        <rect x="50" y="22" width="6" height="20" fill="#475569"/>
+        <rect x="16" y="18" width="7" height="28" fill="#dc2626"/>
+        <rect x="25" y="20" width="6" height="24" fill="#2563eb"/>
+        <rect x="33" y="20" width="6" height="24" fill="#2563eb"/>
+        <rect x="41" y="18" width="7" height="28" fill="#dc2626"/>
+      </svg>
+      Train
+    </a>
+    <a class="lp-nav__signin" href="/auth/login">
+      <span class="lp-btn__g" aria-hidden="true">G</span>
+      Sign in
+    </a>
+  </div>
+</header>
+
+<!-- ===== HERO ===== -->
+<section class="lp-hero">
+  <div class="lp-container lp-hero__inner">
+    <div class="lp-hero__copy">
+      <span class="lp-eyebrow">Barbell tracker &mdash; iPhone first</span>
+      <h1>Lift. Tap. <em>Repeat.</em></h1>
+      <p class="lp-hero__lead">
+        A workout log that gets out of your way. Tap each rep as you finish it,
+        then put the phone down. Hit five clean sessions in a row and Train
+        bumps the weight for you &mdash; no spreadsheet, no decisions on the
+        gym floor.
+      </p>
+      <div class="lp-hero__cta">
+        <a class="lp-btn lp-btn--primary" href="/auth/login">
+          <span class="lp-btn__g" aria-hidden="true">G</span>
+          Sign in with Google
+        </a>
+        <span class="lp-hero__note">Free &middot; no app to install</span>
+      </div>
+
+      <ul class="lp-hero__bullets">
+        <li><b>1&times;</b><span>Tap per set</span></li>
+        <li><b>5&times;</b><span>Clean sessions to bump</span></li>
+        <li><b>30d</b><span>Activity at a glance</span></li>
+      </ul>
+    </div>
+
+    <!-- phone mockup -->
+    <div class="lp-hero__art">
+      <div class="lp-phone" aria-hidden="true">
+        <div class="lp-phone__notch"></div>
+        <div class="lp-phone__screen">
+          <div class="lp-phone__bar">
+            <b>Fri, May 1</b>
+            <span class="lp-phone__pill">In progress</span>
+          </div>
+
+          <div class="lp-phone__exercise">
+            <div class="lp-phone__ex-head">
+              <span class="lp-phone__ex-name">Squat</span>
+              <span class="lp-phone__ex-meta">5&times;5 &middot; <b>60 kg</b></span>
+            </div>
+            <!-- barbell -->
+            <svg class="lp-phone__bb" viewBox="0 0 320 36" preserveAspectRatio="xMidYMid meet">
+              <rect x="10" y="16" width="300" height="4" fill="#94a3b8"/>
+              <rect x="14" y="10" width="4" height="16" fill="#475569"/>
+              <rect x="302" y="10" width="4" height="16" fill="#475569"/>
+              <rect x="22" y="6" width="9" height="24" fill="#dc2626" stroke="#7f1d1d"/>
+              <rect x="34" y="9" width="7" height="18" fill="#2563eb" stroke="#1e3a8a"/>
+              <rect x="44" y="11" width="6" height="14" fill="#1d4ed8" stroke="#1e3a8a"/>
+              <rect x="270" y="11" width="6" height="14" fill="#1d4ed8" stroke="#1e3a8a"/>
+              <rect x="279" y="9" width="7" height="18" fill="#2563eb" stroke="#1e3a8a"/>
+              <rect x="289" y="6" width="9" height="24" fill="#dc2626" stroke="#7f1d1d"/>
+            </svg>
+            <div class="lp-phone__circles">
+              <span class="lp-phone__c lp-phone__c--on">5</span>
+              <span class="lp-phone__c lp-phone__c--on">5</span>
+              <span class="lp-phone__c lp-phone__c--on">5</span>
+              <span class="lp-phone__c lp-phone__c--mid">4</span>
+              <span class="lp-phone__c">5</span>
+            </div>
+          </div>
+
+          <div class="lp-phone__exercise">
+            <div class="lp-phone__ex-head">
+              <span class="lp-phone__ex-name">Bench Press</span>
+              <span class="lp-phone__ex-meta">5&times;5 &middot; <b>42.5 kg</b></span>
+            </div>
+            <div class="lp-phone__circles">
+              <span class="lp-phone__c">5</span>
+              <span class="lp-phone__c">5</span>
+              <span class="lp-phone__c">5</span>
+              <span class="lp-phone__c">5</span>
+              <span class="lp-phone__c">5</span>
+            </div>
+          </div>
+
+          <div class="lp-phone__rest">
+            <b>0:56</b>
+            <span>Rest</span>
+            <div class="lp-phone__rest-bar"><div class="lp-phone__rest-fill"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== STRIP ===== -->
+<div class="lp-strip">
+  <div class="lp-container lp-strip__row">
+    <span><b>No spreadsheets.</b></span>
+    <span class="lp-strip__dot"></span>
+    <span><b>No subscriptions.</b></span>
+    <span class="lp-strip__dot"></span>
+    <span><b>No notifications.</b></span>
+    <span class="lp-strip__dot"></span>
+    <span><b>Just lift.</b></span>
+  </div>
 </div>
+
+<!-- ===== FEATURES ===== -->
+<section class="lp-section lp-features">
+  <div class="lp-container">
+    <header class="lp-section__head">
+      <span class="lp-section__kicker">What you get</span>
+      <h2 class="lp-section__title">Everything for the lift.<br>Nothing else.</h2>
+      <p class="lp-section__sub">
+        Train is sized for an iPhone screen and a sweaty hand. Big targets,
+        tabular numbers, no animations to wait through &mdash; the whole thing
+        renders before your barbell hits the ground.
+      </p>
+    </header>
+
+    <div class="lp-features__grid">
+
+      <!-- One-tap reps -->
+      <article class="lp-feature">
+        <div class="lp-feature__art">
+          <div class="fa-circles">
+            <span>5</span>
+            <span class="tap">5</span>
+            <span>5</span>
+          </div>
+        </div>
+        <span class="lp-feature__tag">Tap to log</span>
+        <h3>One thumb. One tap per set.</h3>
+        <p>
+          Big rep circles tap from blue to red as you finish each set. Miss a
+          rep? Tap again to mark it partial. That&rsquo;s the entire UX.
+        </p>
+      </article>
+
+      <!-- Auto progression -->
+      <article class="lp-feature">
+        <div class="lp-feature__art">
+          <div class="fa-bump">+2.5 kg</div>
+          <div class="fa-dots">
+            <span class="on"></span>
+            <span class="on"></span>
+            <span class="on"></span>
+            <span class="on"></span>
+            <span class="on"></span>
+            <span class="arrow">&rarr;</span>
+          </div>
+        </div>
+        <span class="lp-feature__tag">Auto-progression</span>
+        <h3>Five clean sessions &rarr; bump.</h3>
+        <p>
+          Hit every prescribed rep five workouts in a row and Train raises the
+          weight automatically next time. Stall once and the streak resets.
+          Honest progress, no negotiating.
+        </p>
+      </article>
+
+      <!-- Charts -->
+      <article class="lp-feature">
+        <div class="lp-feature__art">
+          <svg class="fa-chart" viewBox="0 0 320 180" preserveAspectRatio="none">
+            <line x1="32" y1="40"  x2="306" y2="40"  stroke="#1f2937" stroke-width="1"/>
+            <line x1="32" y1="90"  x2="306" y2="90"  stroke="#1f2937" stroke-width="1"/>
+            <line x1="32" y1="140" x2="306" y2="140" stroke="#1f2937" stroke-width="1"/>
+            <text x="26" y="44" text-anchor="end" fill="#64748b" font-size="10" font-family="-apple-system">80</text>
+            <text x="26" y="144" text-anchor="end" fill="#64748b" font-size="10" font-family="-apple-system">50</text>
+            <polyline fill="none" stroke="#1d4ed8" stroke-width="2.5"
+              points="40,140 80,128 120,114 160,98 200,86 240,68 280,54"/>
+            <circle cx="40"  cy="140" r="4" fill="#16a34a" stroke="#0f172a" stroke-width="1"/>
+            <circle cx="80"  cy="128" r="4" fill="#16a34a" stroke="#0f172a" stroke-width="1"/>
+            <circle cx="120" cy="114" r="4" fill="#16a34a" stroke="#0f172a" stroke-width="1"/>
+            <circle cx="160" cy="98"  r="4" fill="#f59e0b" stroke="#0f172a" stroke-width="1"/>
+            <circle cx="200" cy="86"  r="4" fill="#16a34a" stroke="#0f172a" stroke-width="1"/>
+            <circle cx="240" cy="68"  r="4" fill="#16a34a" stroke="#0f172a" stroke-width="1"/>
+            <circle cx="280" cy="54"  r="5" fill="#dc2626" stroke="#0f172a" stroke-width="1"/>
+          </svg>
+        </div>
+        <span class="lp-feature__tag">Charts</span>
+        <h3>The line you&rsquo;re here for.</h3>
+        <p>
+          A clean weight-vs-time chart per lift. Green dots are clean sessions,
+          amber are partials &mdash; you can see at a glance whether you&rsquo;re
+          actually progressing or just showing up.
+        </p>
+      </article>
+
+      <!-- Activity grid -->
+      <article class="lp-feature">
+        <div class="lp-feature__art">
+          <div class="fa-grid">
+            <span></span><span class="done"></span><span class="done"></span><span></span><span class="partial"></span><span></span><span class="done"></span><span></span><span class="done"></span><span></span>
+            <span class="done"></span><span></span><span class="done"></span><span class="done"></span><span></span><span class="done"></span><span></span><span class="partial"></span><span class="done"></span><span></span>
+            <span class="done"></span><span class="done"></span><span></span><span class="done"></span><span class="done"></span><span></span><span class="done"></span><span class="done"></span><span></span><span class="today"></span>
+          </div>
+        </div>
+        <span class="lp-feature__tag">30-day grid</span>
+        <h3>A month, at a thumb-glance.</h3>
+        <p>
+          Green is a clean session, amber is partial, dotted is today. If
+          you&rsquo;re drifting, the gaps make it obvious before you&rsquo;ve
+          had time to lie to yourself about it.
+        </p>
+      </article>
+
+      <!-- Working weights -->
+      <article class="lp-feature">
+        <div class="lp-feature__art">
+          <div class="fa-weights">
+            <div class="fa-weights__row">
+              <span class="fa-weights__name">Squat</span>
+              <span class="fa-weights__w"><b>60</b> kg</span>
+              <span class="fa-weights__streak"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>
+            </div>
+            <div class="fa-weights__row bump">
+              <span class="fa-weights__name">Deadlift</span>
+              <span class="fa-weights__w"><b>80</b> kg</span>
+              <span class="fa-weights__streak"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+            </div>
+            <div class="fa-weights__row">
+              <span class="fa-weights__name">Bench</span>
+              <span class="fa-weights__w"><b>42.5</b> kg</span>
+              <span class="fa-weights__streak"><i class="on"></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </div>
+        </div>
+        <span class="lp-feature__tag">Working weights</span>
+        <h3>Always know what&rsquo;s on the bar.</h3>
+        <p>
+          Every working weight, every streak, on the home screen. The amber
+          row tells you a bump is coming next session. The empty dots tell you
+          there&rsquo;s work to do.
+        </p>
+      </article>
+
+      <!-- Cardio -->
+      <article class="lp-feature">
+        <div class="lp-feature__art">
+          <div class="fa-cardio">
+            <div class="fa-cardio__tile">Time<b>20</b></div>
+            <div class="fa-cardio__tile">Speed<b>5.0</b></div>
+            <div class="fa-cardio__tile">Incline<b>8</b></div>
+          </div>
+        </div>
+        <span class="lp-feature__tag">Cardio</span>
+        <h3>Walking counts, too.</h3>
+        <p>
+          Treadmill walks log alongside your lifts &mdash; time, speed and
+          incline, each adjustable with a tap. One-button done. No GPS, no
+          heart-rate fuss, no extra app.
+        </p>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== AUTO-PROGRESSION CALLOUT ===== -->
+<section class="lp-rule">
+  <div class="lp-container lp-rule__inner">
+    <div>
+      <span class="lp-section__kicker">The 5-in-a-row rule</span>
+      <h2>Earn the bump. <em>Every time.</em></h2>
+      <p>
+        Linear progression is what builds beginners and intermediates. Train
+        enforces it without nagging: hit every prescribed rep five workouts
+        in a row and the next session lands with the bar a notch heavier.
+        Miss a rep? The streak resets &mdash; same weight, try again. The
+        only argument you&rsquo;ll have is with the barbell.
+      </p>
+    </div>
+    <div class="lp-rule__viz">
+      <div class="lp-rule__row"><span>Squat streak</span><b>4 / 5 sessions</b></div>
+      <div class="lp-rule__bar">
+        <span class="on"></span>
+        <span class="on"></span>
+        <span class="on"></span>
+        <span class="on"></span>
+        <span></span>
+      </div>
+      <div class="lp-rule__after">
+        <span>Next session:</span>
+        <s>60 kg</s>
+        <span class="arrow">&rarr;</span>
+        <b>62.5 kg</b>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section class="lp-section">
+  <div class="lp-container">
+    <header class="lp-section__head">
+      <span class="lp-section__kicker">How it works</span>
+      <h2 class="lp-section__title">Three steps. None of them spreadsheets.</h2>
+    </header>
+
+    <div class="lp-how__grid">
+      <article class="lp-step">
+        <h3>Sign in with Google</h3>
+        <p>
+          One tap. No password to forget at the squat rack. Your data lives on
+          a single small server &mdash; no third-party analytics, no ads.
+        </p>
+      </article>
+      <article class="lp-step">
+        <h3>Tap reps as you lift</h3>
+        <p>
+          Each set is a big circle. Tap once when you finish it. Long-press to
+          mark a partial. The rest timer pops up at the bottom and stays out
+          of the way.
+        </p>
+      </article>
+      <article class="lp-step">
+        <h3>Let Train bump the bar</h3>
+        <p>
+          Five clean sessions in a row and your next workout is heavier. No
+          need to remember what you lifted last Tuesday &mdash; Train already
+          did.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FINAL CTA ===== -->
+<section class="lp-cta">
+  <div class="lp-container lp-cta__inner">
+    <h2>Open it on your phone. <em>Start lifting.</em></h2>
+    <p>
+      Train is built for an iPhone in your pocket between sets. Pair Bluetooth
+      headphones, queue up a playlist, sign in once, and the next thing you
+      need to do is press the bar.
+    </p>
+    <a class="lp-btn lp-btn--primary" href="/auth/login">
+      <span class="lp-btn__g" aria-hidden="true">G</span>
+      Sign in with Google
+    </a>
+  </div>
+</section>
+
+<footer class="lp-foot">
+  <div class="lp-container lp-foot__inner">
+    <span>&copy; Train &middot; built for the gym, not the App Store</span>
+    <span><a href="/auth/login">Sign in</a></span>
+  </div>
+</footer>
+
 </body>
 </html>
