@@ -11,6 +11,15 @@ import (
 	"strings"
 )
 
+const clearUserExerciseSortOrder = `-- name: ClearUserExerciseSortOrder :exec
+DELETE FROM user_exercise_sort_order WHERE user_id = ?
+`
+
+func (q *Queries) ClearUserExerciseSortOrder(ctx context.Context, userID int64) error {
+	_, err := q.db.ExecContext(ctx, clearUserExerciseSortOrder, userID)
+	return err
+}
+
 const countUserWorkouts = `-- name: CountUserWorkouts :one
 SELECT COUNT(*) FROM workouts WHERE user_id = ?
 `
@@ -457,8 +466,51 @@ FROM exercises ORDER BY sort_order
 // =============================================================================
 // EXERCISES
 // =============================================================================
+// Global order. Used by progression code where order does not matter.
 func (q *Queries) ListExercises(ctx context.Context) ([]Exercise, error) {
 	rows, err := q.db.QueryContext(ctx, listExercises)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Exercise
+	for rows.Next() {
+		var i Exercise
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Kind,
+			&i.DefaultSets,
+			&i.DefaultReps,
+			&i.DefaultWeightKg,
+			&i.SortOrder,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExercisesForUser = `-- name: ListExercisesForUser :many
+SELECT e.id, e.slug, e.name, e.kind, e.default_sets, e.default_reps, e.default_weight_kg, e.sort_order
+FROM exercises e
+LEFT JOIN user_exercise_sort_order uso
+    ON uso.exercise_id = e.id AND uso.user_id = ?
+ORDER BY COALESCE(uso.sort_order, e.sort_order), e.id
+`
+
+// Per-user order: rows in user_exercise_sort_order override exercises.sort_order.
+// Exercises without a per-user row fall back to the seeded default.
+func (q *Queries) ListExercisesForUser(ctx context.Context, userID int64) ([]Exercise, error) {
+	rows, err := q.db.QueryContext(ctx, listExercisesForUser, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -910,46 +962,44 @@ func (q *Queries) UnhideExercise(ctx context.Context, arg UnhideExerciseParams) 
 	return err
 }
 
-const updateExerciseSortOrder = `-- name: UpdateExerciseSortOrder :exec
-UPDATE exercises SET sort_order = ? WHERE id = ?
-`
-
-type UpdateExerciseSortOrderParams struct {
-	SortOrder int64
-	ID        int64
-}
-
-func (q *Queries) UpdateExerciseSortOrder(ctx context.Context, arg UpdateExerciseSortOrderParams) error {
-	_, err := q.db.ExecContext(ctx, updateExerciseSortOrder, arg.SortOrder, arg.ID)
-	return err
-}
-
 const updateSetActualReps = `-- name: UpdateSetActualReps :exec
-UPDATE sets SET actual_reps = ? WHERE id = ?
+UPDATE sets SET actual_reps = ?
+WHERE sets.id = ?
+  AND sets.workout_id IN (SELECT w.id FROM workouts w WHERE w.user_id = ?)
 `
 
 type UpdateSetActualRepsParams struct {
 	ActualReps sql.NullInt64
 	ID         int64
+	UserID     int64
 }
 
+// user_id check is defence in depth; handlers already verify ownership.
 func (q *Queries) UpdateSetActualReps(ctx context.Context, arg UpdateSetActualRepsParams) error {
-	_, err := q.db.ExecContext(ctx, updateSetActualReps, arg.ActualReps, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateSetActualReps, arg.ActualReps, arg.ID, arg.UserID)
 	return err
 }
 
 const updateSetsWeightForExercise = `-- name: UpdateSetsWeightForExercise :exec
-UPDATE sets SET weight_kg = ? WHERE workout_id = ? AND exercise_id = ?
+UPDATE sets SET weight_kg = ?
+WHERE sets.workout_id = ? AND sets.exercise_id = ?
+  AND sets.workout_id IN (SELECT w.id FROM workouts w WHERE w.user_id = ?)
 `
 
 type UpdateSetsWeightForExerciseParams struct {
 	WeightKg   float64
 	WorkoutID  int64
 	ExerciseID int64
+	UserID     int64
 }
 
 func (q *Queries) UpdateSetsWeightForExercise(ctx context.Context, arg UpdateSetsWeightForExerciseParams) error {
-	_, err := q.db.ExecContext(ctx, updateSetsWeightForExercise, arg.WeightKg, arg.WorkoutID, arg.ExerciseID)
+	_, err := q.db.ExecContext(ctx, updateSetsWeightForExercise,
+		arg.WeightKg,
+		arg.WorkoutID,
+		arg.ExerciseID,
+		arg.UserID,
+	)
 	return err
 }
 
@@ -1025,6 +1075,24 @@ func (q *Queries) UpsertExercise(ctx context.Context, arg UpsertExerciseParams) 
 	return err
 }
 
+const upsertUserExerciseSortOrder = `-- name: UpsertUserExerciseSortOrder :exec
+INSERT INTO user_exercise_sort_order (user_id, exercise_id, sort_order)
+VALUES (?, ?, ?)
+ON CONFLICT(user_id, exercise_id) DO UPDATE SET
+    sort_order = excluded.sort_order
+`
+
+type UpsertUserExerciseSortOrderParams struct {
+	UserID     int64
+	ExerciseID int64
+	SortOrder  int64
+}
+
+func (q *Queries) UpsertUserExerciseSortOrder(ctx context.Context, arg UpsertUserExerciseSortOrderParams) error {
+	_, err := q.db.ExecContext(ctx, upsertUserExerciseSortOrder, arg.UserID, arg.ExerciseID, arg.SortOrder)
+	return err
+}
+
 const upsertUserExerciseWeight = `-- name: UpsertUserExerciseWeight :exec
 INSERT INTO user_exercise_weight (user_id, exercise_id, weight_kg, success_streak, updated_at)
 VALUES (?, ?, ?, ?, ?)
@@ -1055,7 +1123,12 @@ func (q *Queries) UpsertUserExerciseWeight(ctx context.Context, arg UpsertUserEx
 
 const upsertWalkingSession = `-- name: UpsertWalkingSession :exec
 INSERT INTO walking_sessions (workout_id, duration_min, speed_x10, incline_x10)
-VALUES (?, ?, ?, ?)
+SELECT w.id,
+       ?1,
+       ?2,
+       ?3
+FROM workouts w
+WHERE w.id = ?4 AND w.user_id = ?5
 ON CONFLICT(workout_id) DO UPDATE SET
     duration_min = excluded.duration_min,
     speed_x10    = excluded.speed_x10,
@@ -1063,18 +1136,23 @@ ON CONFLICT(workout_id) DO UPDATE SET
 `
 
 type UpsertWalkingSessionParams struct {
-	WorkoutID   int64
 	DurationMin int64
 	SpeedX10    int64
 	InclineX10  int64
+	WorkoutID   int64
+	UserID      int64
 }
 
+// The SELECT yields zero rows (and therefore writes nothing) if the workout
+// does not belong to user_id. Handlers already check ownership; this is
+// defence in depth.
 func (q *Queries) UpsertWalkingSession(ctx context.Context, arg UpsertWalkingSessionParams) error {
 	_, err := q.db.ExecContext(ctx, upsertWalkingSession,
-		arg.WorkoutID,
 		arg.DurationMin,
 		arg.SpeedX10,
 		arg.InclineX10,
+		arg.WorkoutID,
+		arg.UserID,
 	)
 	return err
 }

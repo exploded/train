@@ -124,7 +124,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
 	ctx := r.Context()
 
-	exercises, err := queries.ListExercises(ctx)
+	exercises, err := queries.ListExercisesForUser(ctx, user.ID)
 	if err != nil {
 		serverError(w, "home: list exercises", err)
 		return
@@ -421,7 +421,7 @@ func handleHistoryMore(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	exercises, err := queries.ListExercises(r.Context())
+	exercises, err := queries.ListExercisesForUser(r.Context(), user.ID)
 	if err != nil {
 		serverError(w, "history more: list exercises", err)
 		return
@@ -461,7 +461,7 @@ func handleWorkoutExpand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exercises, err := queries.ListExercises(r.Context())
+	exercises, err := queries.ListExercisesForUser(r.Context(), user.ID)
 	if err != nil {
 		serverError(w, "expand: list exercises", err)
 		return
@@ -514,7 +514,7 @@ type viewHistory struct {
 
 func handleHistoryPage(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	exercises, err := queries.ListExercises(r.Context())
+	exercises, err := queries.ListExercisesForUser(r.Context(), user.ID)
 	if err != nil {
 		serverError(w, "history page: list exercises", err)
 		return

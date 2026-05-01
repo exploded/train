@@ -56,9 +56,6 @@ OAUTH_REDIRECT_URL=https://train.mchugh.au/auth/google/callback
 
 # 32-byte HMAC key (auto-generated)
 SESSION_KEY=$SESSION_KEY
-
-# DEV ONLY: leave blank in production
-DEV_USER_EMAIL=
 ENV_TEMPLATE
     chown www-data:www-data "$ENV_FILE"
     chmod 600 "$ENV_FILE"

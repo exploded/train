@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS user_exercise_hidden (
     PRIMARY KEY (user_id, exercise_id)
 );
 
+-- Per-user exercise sort order. Overrides exercises.sort_order on a
+-- user-by-user basis. Exercises without a row here fall back to the
+-- global default order.
+CREATE TABLE IF NOT EXISTS user_exercise_sort_order (
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    sort_order  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, exercise_id)
+);
+
 CREATE TABLE IF NOT EXISTS workouts (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

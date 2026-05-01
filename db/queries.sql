@@ -49,8 +49,18 @@ DELETE FROM sessions WHERE expires_at <= ?;
 -- =============================================================================
 
 -- name: ListExercises :many
+-- Global order. Used by progression code where order does not matter.
 SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order
 FROM exercises ORDER BY sort_order;
+
+-- name: ListExercisesForUser :many
+-- Per-user order: rows in user_exercise_sort_order override exercises.sort_order.
+-- Exercises without a per-user row fall back to the seeded default.
+SELECT e.id, e.slug, e.name, e.kind, e.default_sets, e.default_reps, e.default_weight_kg, e.sort_order
+FROM exercises e
+LEFT JOIN user_exercise_sort_order uso
+    ON uso.exercise_id = e.id AND uso.user_id = ?
+ORDER BY COALESCE(uso.sort_order, e.sort_order), e.id;
 
 -- name: GetExerciseByID :one
 SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order
@@ -67,8 +77,14 @@ ON CONFLICT(slug) DO UPDATE SET
     default_sets = excluded.default_sets,
     default_reps = excluded.default_reps;
 
--- name: UpdateExerciseSortOrder :exec
-UPDATE exercises SET sort_order = ? WHERE id = ?;
+-- name: ClearUserExerciseSortOrder :exec
+DELETE FROM user_exercise_sort_order WHERE user_id = ?;
+
+-- name: UpsertUserExerciseSortOrder :exec
+INSERT INTO user_exercise_sort_order (user_id, exercise_id, sort_order)
+VALUES (?, ?, ?)
+ON CONFLICT(user_id, exercise_id) DO UPDATE SET
+    sort_order = excluded.sort_order;
 
 -- =============================================================================
 -- USER EXERCISE WEIGHT
@@ -193,10 +209,15 @@ INSERT INTO sets (workout_id, exercise_id, set_index, target_reps, actual_reps, 
 VALUES (?, ?, ?, ?, NULL, ?);
 
 -- name: UpdateSetActualReps :exec
-UPDATE sets SET actual_reps = ? WHERE id = ?;
+-- user_id check is defence in depth; handlers already verify ownership.
+UPDATE sets SET actual_reps = ?
+WHERE sets.id = ?
+  AND sets.workout_id IN (SELECT w.id FROM workouts w WHERE w.user_id = ?);
 
 -- name: UpdateSetsWeightForExercise :exec
-UPDATE sets SET weight_kg = ? WHERE workout_id = ? AND exercise_id = ?;
+UPDATE sets SET weight_kg = ?
+WHERE sets.workout_id = ? AND sets.exercise_id = ?
+  AND sets.workout_id IN (SELECT w.id FROM workouts w WHERE w.user_id = ?);
 
 -- =============================================================================
 -- WALKING SESSIONS
@@ -207,8 +228,16 @@ SELECT workout_id, duration_min, speed_x10, incline_x10
 FROM walking_sessions WHERE workout_id = ?;
 
 -- name: UpsertWalkingSession :exec
+-- The SELECT yields zero rows (and therefore writes nothing) if the workout
+-- does not belong to user_id. Handlers already check ownership; this is
+-- defence in depth.
 INSERT INTO walking_sessions (workout_id, duration_min, speed_x10, incline_x10)
-VALUES (?, ?, ?, ?)
+SELECT w.id,
+       sqlc.arg(duration_min),
+       sqlc.arg(speed_x10),
+       sqlc.arg(incline_x10)
+FROM workouts w
+WHERE w.id = sqlc.arg(workout_id) AND w.user_id = sqlc.arg(user_id)
 ON CONFLICT(workout_id) DO UPDATE SET
     duration_min = excluded.duration_min,
     speed_x10    = excluded.speed_x10,

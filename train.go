@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -129,12 +130,42 @@ func (rl *rateLimiter) allow(ip string) bool {
 	return v.count <= rl.rate
 }
 
+// clientIP returns the originating client's IP. In production the app sits
+// behind Caddy on loopback, so the TCP RemoteAddr is always 127.0.0.1 and
+// would collapse the rate limiter into one bucket for the whole site. When
+// the connection is from a loopback address we trust the leftmost
+// X-Forwarded-For entry (Caddy populates this); otherwise we use RemoteAddr
+// directly so a public-facing deployment without a proxy can't be spoofed
+// by a client setting its own X-Forwarded-For.
 func clientIP(r *http.Request) string {
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
 	}
-	return ip
+	if isLoopback(host) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if comma := strings.IndexByte(xff, ','); comma >= 0 {
+				xff = xff[:comma]
+			}
+			if ip := strings.TrimSpace(xff); ip != "" {
+				return ip
+			}
+		}
+		if xr := strings.TrimSpace(r.Header.Get("X-Real-Ip")); xr != "" {
+			return xr
+		}
+	}
+	return host
+}
+
+func isLoopback(host string) bool {
+	if host == "" {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func isSecureRequest(r *http.Request) bool {

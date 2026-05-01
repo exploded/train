@@ -27,7 +27,7 @@ type viewSettings struct {
 
 func handleSettings(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	exercises, err := queries.ListExercises(r.Context())
+	exercises, err := queries.ListExercisesForUser(r.Context(), user.ID)
 	if err != nil {
 		serverError(w, "settings: list exercises", err)
 		return
@@ -89,12 +89,11 @@ func handleSettingsToggle(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSettingsReorder accepts a comma-separated list of exercise IDs in
-// the desired display order and rewrites exercises.sort_order accordingly.
-// Order is global (the schema only carries one sort_order column per
-// exercise), so a reorder applies to every user. That matches the rest of
-// the schema where exercise definitions are shared and only weights/hidden
-// state are per-user.
+// the desired display order and writes them to user_exercise_sort_order
+// scoped to the calling user. Exercises absent from the list fall back to
+// the global default order on read.
 func handleSettingsReorder(w http.ResponseWriter, r *http.Request) {
+	user := userFrom(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -122,11 +121,15 @@ func handleSettingsReorder(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	qtx := queries.WithTx(tx)
+	if err := qtx.ClearUserExerciseSortOrder(r.Context(), user.ID); err != nil {
+		serverError(w, "reorder clear", err)
+		return
+	}
 	for i, id := range ids {
-		if err := qtx.UpdateExerciseSortOrder(r.Context(), db.UpdateExerciseSortOrderParams{
-			SortOrder: int64(i + 1), ID: id,
+		if err := qtx.UpsertUserExerciseSortOrder(r.Context(), db.UpsertUserExerciseSortOrderParams{
+			UserID: user.ID, ExerciseID: id, SortOrder: int64(i + 1),
 		}); err != nil {
-			slog.Error("reorder update", "error", err, "id", id)
+			slog.Error("reorder upsert", "error", err, "id", id)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}

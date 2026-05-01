@@ -15,7 +15,9 @@ iPhone-only mobile barbell workout tracker with auto-progression. Hosted at
 
 1. `cp .env.example .env`
 2. Set `SESSION_KEY` to 64 random hex chars (`openssl rand -hex 32`).
-3. Set `DEV_USER_EMAIL=james67@gmail.com` to bypass Google OAuth.
+3. Create a Google OAuth client ID at console.cloud.google.com (redirect URI
+   `http://localhost:8080/auth/google/callback`) and fill in
+   `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `OAUTH_REDIRECT_URL`.
 4. `build.bat` (Windows) — builds and runs on http://localhost:8080.
 5. Use Chrome DevTools iPhone emulation (Cmd+Opt+I → toggle device).
 

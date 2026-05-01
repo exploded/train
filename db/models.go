@@ -50,6 +50,12 @@ type UserExerciseHidden struct {
 	ExerciseID int64
 }
 
+type UserExerciseSortOrder struct {
+	UserID     int64
+	ExerciseID int64
+	SortOrder  int64
+}
+
 type UserExerciseWeight struct {
 	UserID        int64
 	ExerciseID    int64

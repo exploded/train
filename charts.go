@@ -278,7 +278,7 @@ func formatOneDecimal(v float64) string { return strconv.FormatFloat(v, 'f', 1, 
 
 func handleCharts(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
-	exercises, err := queries.ListExercises(r.Context())
+	exercises, err := queries.ListExercisesForUser(r.Context(), user.ID)
 	if err != nil {
 		serverError(w, "charts: list exercises", err)
 		return

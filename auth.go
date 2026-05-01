@@ -33,7 +33,6 @@ type oauthConfig struct {
 	cfg        *oauth2.Config
 	verifier   *oidc.IDTokenVerifier
 	sessionKey []byte
-	devEmail   string // if set, /auth/login bypasses Google entirely
 }
 
 func initOAuth(ctx context.Context) error {
@@ -41,7 +40,6 @@ func initOAuth(ctx context.Context) error {
 	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
 	redirect := os.Getenv("OAUTH_REDIRECT_URL")
 	keyHex := os.Getenv("SESSION_KEY")
-	devEmail := os.Getenv("DEV_USER_EMAIL")
 
 	if keyHex == "" {
 		return errors.New("SESSION_KEY not set")
@@ -51,15 +49,10 @@ func initOAuth(ctx context.Context) error {
 		return errors.New("SESSION_KEY must be hex with at least 16 bytes (32 hex chars)")
 	}
 	oauthCfg.sessionKey = key
-	oauthCfg.devEmail = devEmail
 
 	if clientID == "" || clientSecret == "" || redirect == "" {
-		// Allow startup so the dev shortcut still works without OAuth creds.
 		oauthCfg.enabled = false
-		if devEmail == "" {
-			return errors.New("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URL must be set (or DEV_USER_EMAIL for local dev)")
-		}
-		return nil
+		return errors.New("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URL must be set")
 	}
 
 	provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
@@ -120,16 +113,6 @@ func handleTermsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
-	// Local-dev shortcut: skip Google entirely, log in as DEV_USER_EMAIL.
-	if oauthCfg.devEmail != "" {
-		if err := loginDevUser(r.Context(), w); err != nil {
-			serverError(w, "dev login", err)
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
 	if !oauthCfg.enabled {
 		http.Error(w, "OAuth not configured", http.StatusServiceUnavailable)
 		return
@@ -245,7 +228,11 @@ func cleanupExpiredSessions() {
 
 func handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookieName); err == nil {
-		_ = queries.DeleteSession(r.Context(), c.Value)
+		// Log delete failures so a DB outage doesn't silently leave a live
+		// session row behind after the cookie has been cleared client-side.
+		if err := queries.DeleteSession(r.Context(), c.Value); err != nil {
+			slog.Error("logout: delete session", "error", err)
+		}
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
@@ -257,16 +244,6 @@ func handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-
-func loginDevUser(ctx context.Context, w http.ResponseWriter) error {
-	email := oauthCfg.devEmail
-	sub := "dev:" + email
-	user, err := upsertUser(ctx, sub, email, "Dev User")
-	if err != nil {
-		return err
-	}
-	return issueSessionCookie(ctx, w, user.ID, false)
 }
 
 func upsertUser(ctx context.Context, sub, email, name string) (db.User, error) {

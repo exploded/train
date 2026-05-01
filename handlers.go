@@ -195,6 +195,7 @@ func seedWalkingForNewWorkout(ctx context.Context, q *db.Queries, userID int64, 
 	}
 	return q.UpsertWalkingSession(ctx, db.UpsertWalkingSessionParams{
 		WorkoutID:   workoutID,
+		UserID:      userID,
 		DurationMin: duration,
 		SpeedX10:    speed,
 		InclineX10:  incline,
@@ -353,7 +354,7 @@ func userWeightFor(ctx context.Context, q *db.Queries, userID int64, ex db.Exerc
 }
 
 func buildWorkoutView(ctx context.Context, user *currentUser, wk db.Workout) (viewWorkout, error) {
-	exercises, err := queries.ListExercises(ctx)
+	exercises, err := queries.ListExercisesForUser(ctx, user.ID)
 	if err != nil {
 		return viewWorkout{}, err
 	}
@@ -534,7 +535,7 @@ func handleSetTap(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := queries.UpdateSetActualReps(r.Context(), db.UpdateSetActualRepsParams{
-		ActualReps: sql.NullInt64{Int64: next, Valid: true}, ID: id,
+		ActualReps: sql.NullInt64{Int64: next, Valid: true}, ID: id, UserID: user.ID,
 	}); err != nil {
 		serverError(w, "update set", err)
 		return
@@ -589,7 +590,7 @@ func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 		next = sql.NullInt64{Int64: 1, Valid: true}
 	}
 	if err := queries.UpdateSetActualReps(r.Context(), db.UpdateSetActualRepsParams{
-		ActualReps: next, ID: s.ID,
+		ActualReps: next, ID: s.ID, UserID: user.ID,
 	}); err != nil {
 		serverError(w, "walking done: update set", err)
 		return
@@ -671,7 +672,7 @@ func handleWeightChange(w http.ResponseWriter, r *http.Request) {
 
 	// Propagate to today's not-yet-tapped sets so the user sees the new weight.
 	_ = queries.UpdateSetsWeightForExercise(r.Context(), db.UpdateSetsWeightForExerciseParams{
-		WeightKg: next, WorkoutID: wk.ID, ExerciseID: exID,
+		WeightKg: next, WorkoutID: wk.ID, ExerciseID: exID, UserID: user.ID,
 	})
 
 	// Re-render the entire exercise card so circles + barbell + header all sync.
@@ -728,6 +729,7 @@ func handleWalkingAdjust(w http.ResponseWriter, r *http.Request) {
 
 	if err := queries.UpsertWalkingSession(r.Context(), db.UpsertWalkingSessionParams{
 		WorkoutID:   wk.ID,
+		UserID:      user.ID,
 		DurationMin: ws.DurationMin,
 		SpeedX10:    ws.SpeedX10,
 		InclineX10:  ws.InclineX10,

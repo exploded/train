@@ -13,6 +13,13 @@ import (
 
 var contactLimiter = newRateLimiter(3, time.Hour)
 
+// contactSendSem caps in-flight SMTP sends. SMTP send does TLS + auth and
+// can stall for tens of seconds; without a cap a flood of accepted
+// submissions could fan out to enough concurrent goroutines to exhaust file
+// descriptors or trip Gmail's per-account rate limit. The buffer is small
+// because the contact form is low-volume by design.
+var contactSendSem = make(chan struct{}, 2)
+
 type contactPageData struct {
 	Sent  bool
 	Error string
@@ -61,11 +68,20 @@ func handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	go func() {
-		if err := sendContactEmail(replyEmail, message, ip); err != nil {
-			slog.Error("contact send", "error", err, "ip", ip)
-		}
-	}()
+	select {
+	case contactSendSem <- struct{}{}:
+		go func() {
+			defer func() { <-contactSendSem }()
+			if err := sendContactEmail(replyEmail, message, ip); err != nil {
+				slog.Error("contact send", "error", err, "ip", ip)
+			}
+		}()
+	default:
+		// Send queue is full. The user still sees a success page (so we
+		// don't reveal capacity to attackers) but the message is dropped
+		// with a warning logged.
+		slog.Warn("contact send dropped: queue full", "ip", ip)
+	}
 
 	redirectContact(w, r, "sent=1")
 }
@@ -103,9 +119,10 @@ func sendContactEmail(replyEmail, message, ip string) error {
 		displayReply = replyEmail
 	}
 
+	submitted := time.Now().In(appLocation).Format("Mon 2 Jan 2006, 3:04 PM MST")
 	body := fmt.Sprintf(
 		"Reply email: %s\nIP: %s\nSubmitted: %s\n\n%s\n",
-		displayReply, ip, time.Now().UTC().Format(time.RFC3339), message,
+		displayReply, ip, submitted, message,
 	)
 
 	msg := []byte(strings.Join([]string{
