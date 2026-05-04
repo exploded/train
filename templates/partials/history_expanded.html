@@ -19,4 +19,13 @@
       {{end}}
     </div>
   {{end}}
+  <div class="history-expanded__actions">
+    <button class="history-expanded__delete"
+            hx-post="/workout/{{.WorkoutID}}/delete"
+            hx-target="#history-row-{{.WorkoutID}}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this workout? This can't be undone.">
+      Delete workout
+    </button>
+  </div>
 </div>

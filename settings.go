@@ -5,9 +5,41 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"train/db"
 )
+
+const (
+	restSoundCookieName = "rest_sound"
+	restSoundTTL        = 365 * 24 * time.Hour
+
+	restSoundOn  = "on"
+	restSoundOff = "off"
+)
+
+func restSoundFromRequest(r *http.Request) string {
+	c, err := r.Cookie(restSoundCookieName)
+	if err != nil {
+		return restSoundOn
+	}
+	if c.Value == restSoundOff {
+		return restSoundOff
+	}
+	return restSoundOn
+}
+
+func setRestSoundCookie(w http.ResponseWriter, r *http.Request, value string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     restSoundCookieName,
+		Value:    value,
+		Path:     "/",
+		Expires:  time.Now().Add(restSoundTTL),
+		HttpOnly: false,
+		Secure:   isSecureRequest(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
 
 // =============================================================================
 // Settings page: per-user exercise visibility
@@ -22,6 +54,7 @@ type viewSettingsRow struct {
 type viewSettings struct {
 	UserName  string
 	ThemeMode string
+	RestSound string
 	Exercises []viewSettingsRow
 }
 
@@ -40,6 +73,7 @@ func handleSettings(w http.ResponseWriter, r *http.Request) {
 	vs := viewSettings{
 		UserName:  user.Name,
 		ThemeMode: themeFromRequest(r),
+		RestSound: restSoundFromRequest(r),
 	}
 	for _, ex := range exercises {
 		vs.Exercises = append(vs.Exercises, viewSettingsRow{
@@ -139,4 +173,15 @@ func handleSettingsReorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSettingsRestSoundToggle flips the rest-timer sound preference cookie
+// and renders the updated switch back so HTMX can swap it in place.
+func handleSettingsRestSoundToggle(w http.ResponseWriter, r *http.Request) {
+	next := restSoundOn
+	if restSoundFromRequest(r) == restSoundOn {
+		next = restSoundOff
+	}
+	setRestSoundCookie(w, r, next)
+	renderHTML(w, "rest_sound_toggle.html", next == restSoundOn)
 }

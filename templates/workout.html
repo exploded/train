@@ -36,6 +36,13 @@
 
   <main class="exercises">
     {{range .Exercises}}{{template "exercise.html" .}}{{end}}
+
+    {{if .Locked}}
+      <form class="workout-delete" method="post" action="/workout/{{.ID}}/delete"
+            onsubmit="return confirm('Delete this workout? This can\'t be undone.');">
+        <button type="submit" class="workout-delete__btn">Delete workout</button>
+      </form>
+    {{end}}
   </main>
 
   <div class="bottom-spacer"></div>
@@ -44,7 +51,7 @@
 <div id="rest-timer" class="rest-timer" hidden>
   <div class="rest-timer__row">
     <span class="rest-timer__time" id="rest-timer-time">1:30</span>
-    <span class="rest-timer__label">Rest</span>
+    <span class="rest-timer__label" id="rest-timer-label">Rest</span>
     <button class="rest-timer__close" id="rest-timer-close" aria-label="dismiss">&times;</button>
   </div>
   <div class="rest-timer__bar"><div class="rest-timer__fill" id="rest-timer-fill"></div></div>

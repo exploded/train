@@ -1,0 +1,11 @@
+{{- /* bool data: true = rest sound on */ -}}
+<button class="toggle{{if .}} toggle--on{{end}}"
+        role="switch"
+        aria-checked="{{if .}}true{{else}}false{{end}}"
+        aria-label="Toggle rest timer sound"
+        id="rest-sound-toggle"
+        hx-post="/settings/rest-sound/toggle"
+        hx-target="this"
+        hx-swap="outerHTML">
+  <span class="toggle__knob"></span>
+</button>

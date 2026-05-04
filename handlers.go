@@ -493,6 +493,30 @@ func editableTodayWorkout(w http.ResponseWriter, r *http.Request, userID int64) 
 	return wk, true
 }
 
+// isFinalWorkoutTap reports whether the just-applied tap on setID is the
+// workout's last meaningful action, so the rest timer should be dismissed
+// rather than restarted. Two ways to qualify:
+//   - setID is the last set in user display order (the in-order finish case
+//     - earlier sets may still be untapped if the user skipped them, but
+//     they're not coming back for the rest timer).
+//   - no untapped sets remain in the workout (the go-back-and-fill-in case
+//     - this tap completed the final outstanding set anywhere).
+//
+// Call after the tap has been written to the DB so the untapped count
+// reflects post-update state. Errors fall through to false (safe default:
+// fire the timer, user can dismiss manually).
+func isFinalWorkoutTap(ctx context.Context, userID, workoutID, setID int64) bool {
+	if lastID, err := queries.GetLastSetIDInWorkout(ctx, db.GetLastSetIDInWorkoutParams{
+		UserID: userID, WorkoutID: workoutID,
+	}); err == nil && lastID == setID {
+		return true
+	}
+	if count, err := queries.CountUntappedSetsInWorkout(ctx, workoutID); err == nil && count == 0 {
+		return true
+	}
+	return false
+}
+
 // =============================================================================
 // Tap a rep circle
 // =============================================================================
@@ -541,9 +565,16 @@ func handleSetTap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First tap of a set fires the rest timer on the client.
+	// First tap of a set: normally fire the rest timer. Dismiss any running
+	// timer (instead of firing a new one) when this tap is the workout's
+	// final action - either positionally the last set, or completion-wise
+	// the last untapped set anywhere (e.g. user came back to a skipped one).
 	if wasUntapped {
-		w.Header().Set("HX-Trigger", "startRestTimer")
+		trigger := "startRestTimer"
+		if isFinalWorkoutTap(r.Context(), user.ID, wk.ID, s.ID) {
+			trigger = "stopRestTimer"
+		}
+		w.Header().Set("HX-Trigger", trigger)
 	}
 
 	view := toViewSet(db.Set{
@@ -594,6 +625,13 @@ func handleWalkingDone(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		serverError(w, "walking done: update set", err)
 		return
+	}
+
+	// Marking walking done can also be the workout's final action (walking
+	// is the last exercise, or it's the last untapped set anywhere). In
+	// either case dismiss any rest timer left running from a prior set.
+	if !done && isFinalWorkoutTap(r.Context(), user.ID, wk.ID, s.ID) {
+		w.Header().Set("HX-Trigger", "stopRestTimer")
 	}
 
 	walking := loadOrDefaultWalking(r.Context(), s.WorkoutID)

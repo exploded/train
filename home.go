@@ -449,6 +449,37 @@ type viewExpandedRow struct {
 	Exercises []viewExercise
 }
 
+// handleWorkoutDelete removes a workout (and its sets / walking session via
+// CASCADE) for the current user. Two callers:
+//   - History row delete (HTMX): empty 200 lets the caller swap the row's
+//     outerHTML with nothing so it disappears from the list.
+//   - Workout-page delete (plain form): redirect home so the user doesn't
+//     land on an empty 200 page, and so navigating back to /workout starts a
+//     fresh workout instead of resurrecting the just-deleted one.
+func handleWorkoutDelete(w http.ResponseWriter, r *http.Request) {
+	user := userFrom(r)
+	wkID, ok := pathInt64(w, r, "id", "workout id")
+	if !ok {
+		return
+	}
+	wk, err := queries.GetWorkoutByID(r.Context(), wkID)
+	if err != nil || wk.UserID != user.ID {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := queries.DeleteWorkout(r.Context(), db.DeleteWorkoutParams{
+		ID: wk.ID, UserID: user.ID,
+	}); err != nil {
+		serverError(w, "delete workout", err)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 func handleWorkoutExpand(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
 	wkID, ok := pathInt64(w, r, "id", "workout id")

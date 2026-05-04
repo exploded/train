@@ -45,6 +45,14 @@
     </section>
 
     <section class="settings__section">
+      <h2 class="settings__title">Rest timer sound</h2>
+      <div class="settings__row">
+        <span class="settings__row-label">Beep when rest hits zero</span>
+        {{template "rest_sound_toggle.html" (eq .RestSound "on")}}
+      </div>
+    </section>
+
+    <section class="settings__section">
       <h2 class="settings__title">Exercises in new workouts</h2>
       <p class="settings__hint">Hidden exercises are skipped when today&rsquo;s workout is created. History is unaffected.</p>
       <ul class="settings-list js-sortable">

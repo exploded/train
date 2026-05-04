@@ -20,6 +20,20 @@ func (q *Queries) ClearUserExerciseSortOrder(ctx context.Context, userID int64) 
 	return err
 }
 
+const countUntappedSetsInWorkout = `-- name: CountUntappedSetsInWorkout :one
+SELECT COUNT(*) FROM sets WHERE workout_id = ? AND actual_reps IS NULL
+`
+
+// Counts sets that have never been tapped (actual_reps IS NULL). Used to
+// decide whether a tap was the "last to complete" - i.e. the user filled in
+// the final outstanding set, perhaps after going back to one they skipped.
+func (q *Queries) CountUntappedSetsInWorkout(ctx context.Context, workoutID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUntappedSetsInWorkout, workoutID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUserWorkouts = `-- name: CountUserWorkouts :one
 SELECT COUNT(*) FROM workouts WHERE user_id = ?
 `
@@ -138,6 +152,22 @@ func (q *Queries) DeleteSession(ctx context.Context, token string) error {
 	return err
 }
 
+const deleteWorkout = `-- name: DeleteWorkout :exec
+DELETE FROM workouts WHERE id = ? AND user_id = ?
+`
+
+type DeleteWorkoutParams struct {
+	ID     int64
+	UserID int64
+}
+
+// user_id check is defence in depth; handler already verifies ownership.
+// ON DELETE CASCADE on sets and walking_sessions cleans up child rows.
+func (q *Queries) DeleteWorkout(ctx context.Context, arg DeleteWorkoutParams) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkout, arg.ID, arg.UserID)
+	return err
+}
+
 const finishWorkout = `-- name: FinishWorkout :exec
 UPDATE workouts SET completed_at = ? WHERE id = ? AND user_id = ?
 `
@@ -172,6 +202,36 @@ func (q *Queries) GetExerciseByID(ctx context.Context, id int64) (Exercise, erro
 		&i.SortOrder,
 	)
 	return i, err
+}
+
+const getLastSetIDInWorkout = `-- name: GetLastSetIDInWorkout :one
+SELECT s.id
+FROM sets s
+JOIN exercises e ON e.id = s.exercise_id
+LEFT JOIN user_exercise_sort_order uso
+    ON uso.exercise_id = s.exercise_id AND uso.user_id = ?1
+WHERE s.workout_id = ?2
+ORDER BY COALESCE(uso.sort_order, e.sort_order) DESC,
+         e.id DESC,
+         s.set_index DESC
+LIMIT 1
+`
+
+type GetLastSetIDInWorkoutParams struct {
+	UserID    int64
+	WorkoutID int64
+}
+
+// Returns the id of the very last set in user display order: among all sets
+// in the workout, the one whose exercise has the largest effective sort_order
+// (per-user override or global default), tie-broken by exercise id, and
+// within that exercise the largest set_index. Used to suppress the rest
+// timer on the final tap of the workout.
+func (q *Queries) GetLastSetIDInWorkout(ctx context.Context, arg GetLastSetIDInWorkoutParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getLastSetIDInWorkout, arg.UserID, arg.WorkoutID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getLastUser = `-- name: GetLastUser :one

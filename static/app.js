@@ -1,3 +1,13 @@
+// Block iOS pinch-zoom. iOS Safari ignores user-scalable=no in the viewport
+// meta for accessibility, so we suppress the gesture* events directly.
+(function () {
+  "use strict";
+  function block(e) { e.preventDefault(); }
+  document.addEventListener("gesturestart",  block);
+  document.addEventListener("gesturechange", block);
+  document.addEventListener("gestureend",    block);
+})();
+
 // History row expand/collapse. Lives on the home page; tolerant of missing
 // elements so it's safe to load on any page.
 (function () {
@@ -29,42 +39,102 @@
   const el = {
     box:   document.getElementById("rest-timer"),
     time:  document.getElementById("rest-timer-time"),
+    label: document.getElementById("rest-timer-label"),
     fill:  document.getElementById("rest-timer-fill"),
     close: document.getElementById("rest-timer-close"),
   };
   if (!el.box) return;
 
+  let startedAt = 0;
   let endsAt = 0;
   let raf = 0;
+  let beeped = false;
 
-  function fmt(sec) {
-    sec = Math.max(0, Math.ceil(sec));
+  // iOS Safari requires the AudioContext be created or resumed inside a user
+  // gesture; once unlocked it stays usable for the page lifetime. We lazily
+  // create it on the first pointerdown so the timer can play freely later.
+  let audioCtx = null;
+  function unlockAudio() {
+    if (audioCtx) return;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return;
+    try {
+      audioCtx = new Ctor();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (_) { audioCtx = null; }
+  }
+  document.addEventListener("pointerdown", unlockAudio, { once: false, passive: true });
+
+  function soundEnabled() {
+    // Cookie set by POST /settings/rest-sound/toggle. Default = on.
+    return !/(?:^|;\s*)rest_sound=off(?:;|$)/.test(document.cookie);
+  }
+
+  function beep() {
+    if (!soundEnabled() || !audioCtx) return;
+    // Two short sine pips (~880 Hz then ~660 Hz), gain-ramped to avoid clicks.
+    const now = audioCtx.currentTime;
+    [[880, 0], [660, 0.18]].forEach(function (p) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = p[0];
+      const t0 = now + p[1];
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.18);
+    });
+  }
+
+  function fmt(sec, mode) {
+    sec = Math.max(0, mode === "up" ? Math.floor(sec) : Math.ceil(sec));
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return m + ":" + (s < 10 ? "0" + s : s);
   }
 
   function tick() {
-    const remaining = (endsAt - Date.now()) / 1000;
-    el.time.textContent = fmt(remaining);
-    const pct = Math.max(0, Math.min(100, (remaining / REST_SECONDS) * 100));
-    el.fill.style.width = pct + "%";
-    if (remaining <= 0) {
-      el.box.classList.add("rest-timer--done");
-      el.box.classList.remove("rest-timer--running");
-      cancelAnimationFrame(raf);
-      raf = 0;
+    const now = Date.now();
+    const remaining = (endsAt - now) / 1000;
+    if (remaining > 0) {
+      el.time.textContent = fmt(remaining);
+      const pct = Math.max(0, Math.min(100, (remaining / REST_SECONDS) * 100));
+      el.fill.style.width = pct + "%";
+      raf = requestAnimationFrame(tick);
       return;
     }
+    // Crossed zero: switch to count-up mode. Display total elapsed since the
+    // timer started, so the number flows continuously from 1:30 (the rest
+    // duration) upward.
+    if (!beeped) {
+      beeped = true;
+      el.box.classList.add("rest-timer--done");
+      el.box.classList.remove("rest-timer--running");
+      el.label.textContent = "Lift now!";
+      beep();
+    }
+    el.time.textContent = fmt((now - startedAt) / 1000, "up");
     raf = requestAnimationFrame(tick);
   }
 
   function start() {
-    endsAt = Date.now() + REST_SECONDS * 1000;
+    startedAt = Date.now();
+    endsAt = startedAt + REST_SECONDS * 1000;
+    beeped = false;
     el.box.hidden = false;
+    el.label.textContent = "Rest";
+    // Paint the initial countdown frame eagerly so a re-trigger from the
+    // "Lift now!" count-up state snaps cleanly to 1:30 / full bar instead of
+    // briefly showing the stale count-up value before the next rAF runs.
+    el.time.textContent = fmt(REST_SECONDS);
+    el.fill.style.width = "100%";
     el.box.classList.add("rest-timer--running");
     el.box.classList.remove("rest-timer--done");
-    if (!raf) raf = requestAnimationFrame(tick);
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(tick);
   }
 
   function stop() {
@@ -79,6 +149,11 @@
   // HTMX fires this when /sets/{id}/tap returns its first-tap response with
   // the HX-Trigger: startRestTimer header.
   document.body.addEventListener("startRestTimer", start);
+
+  // Last set of the workout (or walking-done when walking is last) sends
+  // stopRestTimer instead, so any running countdown / "Lift now!" is killed
+  // and the bar disappears - nothing left to rest for.
+  document.body.addEventListener("stopRestTimer", stop);
 
   // Lock-violation toast: server returns 409 + HX-Trigger: workoutLocked
   // when the user tries to mutate a finished workout.
@@ -173,11 +248,14 @@
     drag = null;
 
     const ids = rows().map(function (r) { return r.dataset.id; }).join(",");
-    const fd = new FormData();
-    fd.append("order", ids);
+    // URLSearchParams (not FormData) so fetch sends application/x-www-form-
+    // urlencoded - that's what Go's r.ParseForm reads. FormData would send
+    // multipart/form-data and leave r.PostForm empty -> 400 missing order.
+    const body = new URLSearchParams();
+    body.append("order", ids);
     fetch("/settings/reorder", {
       method: "POST",
-      body: fd,
+      body: body,
       credentials: "same-origin",
     });
   }

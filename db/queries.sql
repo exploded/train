@@ -151,6 +151,11 @@ UPDATE workouts SET completed_at = ? WHERE id = ? AND user_id = ?;
 -- name: UnfinishWorkout :exec
 UPDATE workouts SET completed_at = NULL WHERE id = ? AND user_id = ? AND workout_date = ?;
 
+-- name: DeleteWorkout :exec
+-- user_id check is defence in depth; handler already verifies ownership.
+-- ON DELETE CASCADE on sets and walking_sessions cleans up child rows.
+DELETE FROM workouts WHERE id = ? AND user_id = ?;
+
 -- name: ListUserWorkoutsPaged :many
 SELECT id, user_id, workout_date, created_at, completed_at
 FROM workouts
@@ -203,6 +208,29 @@ ORDER BY set_index;
 -- name: GetSet :one
 SELECT id, workout_id, exercise_id, set_index, target_reps, actual_reps, weight_kg
 FROM sets WHERE id = ?;
+
+-- name: GetLastSetIDInWorkout :one
+-- Returns the id of the very last set in user display order: among all sets
+-- in the workout, the one whose exercise has the largest effective sort_order
+-- (per-user override or global default), tie-broken by exercise id, and
+-- within that exercise the largest set_index. Used to suppress the rest
+-- timer on the final tap of the workout.
+SELECT s.id
+FROM sets s
+JOIN exercises e ON e.id = s.exercise_id
+LEFT JOIN user_exercise_sort_order uso
+    ON uso.exercise_id = s.exercise_id AND uso.user_id = sqlc.arg(user_id)
+WHERE s.workout_id = sqlc.arg(workout_id)
+ORDER BY COALESCE(uso.sort_order, e.sort_order) DESC,
+         e.id DESC,
+         s.set_index DESC
+LIMIT 1;
+
+-- name: CountUntappedSetsInWorkout :one
+-- Counts sets that have never been tapped (actual_reps IS NULL). Used to
+-- decide whether a tap was the "last to complete" - i.e. the user filled in
+-- the final outstanding set, perhaps after going back to one they skipped.
+SELECT COUNT(*) FROM sets WHERE workout_id = ? AND actual_reps IS NULL;
 
 -- name: CreateSet :exec
 INSERT INTO sets (workout_id, exercise_id, set_index, target_reps, actual_reps, weight_kg)
