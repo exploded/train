@@ -1,0 +1,54 @@
+{{- /* viewAdminUsers */ -}}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{.ThemeMode}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="{{if eq .ThemeMode "dark"}}#000000{{else}}#0f172a{{end}}">
+<title>Admin &mdash; Users</title>
+<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="{{asset "favicon.svg"}}">
+<link rel="mask-icon" href="{{asset "favicon.svg"}}" color="#0f172a">
+<link rel="stylesheet" href="{{asset "styles.css"}}">
+</head>
+<body class="page page--settings">
+<div class="too-wide"><p>Designed for iPhone &mdash; open on your phone.</p></div>
+
+<div class="phone">
+  <header class="topbar">
+    <a class="topbar__back" href="/" aria-label="back to home">&lsaquo; Back</a>
+    <div class="topbar__date">Users</div>
+    <span class="topbar__action"></span>
+  </header>
+
+  <main class="settings">
+    <section class="settings__section">
+      <h2 class="settings__title">Registered users ({{len .Users}})</h2>
+      <p class="settings__hint">Sorted by signup, newest first.</p>
+      {{if .Users}}
+        <ul class="admin-users">
+          {{range .Users}}
+            <li class="admin-user">
+              <div class="admin-user__head">
+                <span class="admin-user__name">{{.Name}}</span>
+                <span class="admin-user__count">{{.WorkoutCount}} workout{{if ne .WorkoutCount 1}}s{{end}}</span>
+              </div>
+              <div class="admin-user__email">{{.Email}}</div>
+              <div class="admin-user__meta">
+                <span>Joined {{.Created}}</span>
+                <span>Last login {{.LastLogin}}</span>
+              </div>
+            </li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="settings__hint">No users yet.</p>
+      {{end}}
+    </section>
+  </main>
+
+  <div class="bottom-spacer"></div>
+</div>
+</body>
+</html>

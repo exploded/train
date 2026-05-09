@@ -903,6 +903,48 @@ a { color: var(--brand); text-decoration: none; }
   transform: translateX(20px);
 }
 
+/* ========== admin users list ========== */
+.admin-users {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+}
+.admin-user {
+  padding: 0.75rem 0.25rem;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.admin-user__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.admin-user__name {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.admin-user__count {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.admin-user__email {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  word-break: break-all;
+}
+.admin-user__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 /* ========== toast (lock-violation feedback) ========== */
 .toast {
   position: fixed;

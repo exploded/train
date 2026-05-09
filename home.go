@@ -26,6 +26,7 @@ const (
 type viewHome struct {
 	UserName  string
 	ThemeMode string // "light" | "dark" | "auto"
+	IsAdmin   bool   // toggles the Admin link in the topbar
 	Today     viewTodayCard
 	Stats     viewStats
 	Weights   []viewWeightRow
@@ -133,6 +134,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	vh := viewHome{
 		UserName:  user.Name,
 		ThemeMode: themeFromRequest(r),
+		IsAdmin:   isAdmin(user),
 	}
 
 	// Today's card.

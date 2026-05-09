@@ -23,6 +23,13 @@ FROM users WHERE id = (SELECT MAX(id) FROM users);
 -- name: UpdateUserLastLogin :exec
 UPDATE users SET last_login_at = ? WHERE id = ?;
 
+-- name: ListUsersForAdmin :many
+-- All registered users with workout counts, newest signup first. Admin page only.
+SELECT u.id, u.email, u.name, u.created_at, u.last_login_at,
+       (SELECT COUNT(*) FROM workouts w WHERE w.user_id = u.id) AS workout_count
+FROM users u
+ORDER BY u.created_at DESC;
+
 -- =============================================================================
 -- SESSIONS
 -- =============================================================================

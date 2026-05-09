@@ -21,6 +21,7 @@
     <nav class="topbar__nav">
       <a href="/charts" class="topbar__nav-link">Charts</a>
       <a href="/settings" class="topbar__nav-link">Settings</a>
+      {{if .IsAdmin}}<a href="/admin/users" class="topbar__nav-link">Admin</a>{{end}}
       <form class="topbar__action" method="post" action="/auth/logout">
         <button type="submit" class="topbar__nav-link">Sign out</button>
       </form>

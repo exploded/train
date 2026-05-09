@@ -938,6 +938,53 @@ func (q *Queries) ListUserWorkoutsSince(ctx context.Context, arg ListUserWorkout
 	return items, nil
 }
 
+const listUsersForAdmin = `-- name: ListUsersForAdmin :many
+SELECT u.id, u.email, u.name, u.created_at, u.last_login_at,
+       (SELECT COUNT(*) FROM workouts w WHERE w.user_id = u.id) AS workout_count
+FROM users u
+ORDER BY u.created_at DESC
+`
+
+type ListUsersForAdminRow struct {
+	ID           int64
+	Email        string
+	Name         string
+	CreatedAt    string
+	LastLoginAt  string
+	WorkoutCount int64
+}
+
+// All registered users with workout counts, newest signup first. Admin page only.
+func (q *Queries) ListUsersForAdmin(ctx context.Context) ([]ListUsersForAdminRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersForAdmin)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersForAdminRow
+	for rows.Next() {
+		var i ListUsersForAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.CreatedAt,
+			&i.LastLoginAt,
+			&i.WorkoutCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWeightHistoryForExercise = `-- name: ListWeightHistoryForExercise :many
 SELECT w.id AS workout_id, w.workout_date,
        s.weight_kg, s.set_index, s.target_reps, s.actual_reps

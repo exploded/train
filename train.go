@@ -287,6 +287,9 @@ func makeHTTPServer(isProd bool) *http.Server {
 	mux.Handle("POST /exercise/{id}/walking-done", requireAuth(http.HandlerFunc(handleWalkingDone)))
 	mux.Handle("POST /exercise/{id}/walking-adjust", requireAuth(http.HandlerFunc(handleWalkingAdjust)))
 
+	// Admin (gated to adminEmail; non-admins get 404).
+	mux.Handle("GET /admin/users", requireAdmin(http.HandlerFunc(handleAdminUsers)))
+
 	// Static.
 	cwd, _ := os.Getwd()
 	fileServer := http.FileServer(http.Dir(cwd + "/static"))
