@@ -45,6 +45,45 @@ func (q *Queries) CountUserWorkouts(ctx context.Context, userID int64) (int64, e
 	return count, err
 }
 
+const createCustomExercise = `-- name: CreateCustomExercise :execlastid
+INSERT INTO exercises (slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order,
+                      created_by_user_id, auto_progress)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateCustomExerciseParams struct {
+	Slug            string
+	Name            string
+	Kind            string
+	DefaultSets     int64
+	DefaultReps     int64
+	DefaultWeightKg float64
+	SortOrder       int64
+	CreatedByUserID sql.NullInt64
+	AutoProgress    int64
+}
+
+// Inserts a user-created custom exercise. sort_order is computed by the
+// caller (typically MAX(sort_order)+1 so the new exercise appears last in
+// the global order; per-user reordering still applies on top).
+func (q *Queries) CreateCustomExercise(ctx context.Context, arg CreateCustomExerciseParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createCustomExercise,
+		arg.Slug,
+		arg.Name,
+		arg.Kind,
+		arg.DefaultSets,
+		arg.DefaultReps,
+		arg.DefaultWeightKg,
+		arg.SortOrder,
+		arg.CreatedByUserID,
+		arg.AutoProgress,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
 const createSession = `-- name: CreateSession :exec
 
 INSERT INTO sessions (token, user_id, expires_at, created_at)
@@ -184,10 +223,14 @@ func (q *Queries) FinishWorkout(ctx context.Context, arg FinishWorkoutParams) er
 }
 
 const getExerciseByID = `-- name: GetExerciseByID :one
-SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order
+SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order,
+       created_by_user_id, auto_progress, deleted_at
 FROM exercises WHERE id = ?
 `
 
+// No visibility filter at the SQL layer; handlers enforce ownership before
+// mutation (custom rename/delete) and seeded vs custom is determined by the
+// created_by_user_id column on the returned row.
 func (q *Queries) GetExerciseByID(ctx context.Context, id int64) (Exercise, error) {
 	row := q.db.QueryRowContext(ctx, getExerciseByID, id)
 	var i Exercise
@@ -200,6 +243,9 @@ func (q *Queries) GetExerciseByID(ctx context.Context, id int64) (Exercise, erro
 		&i.DefaultReps,
 		&i.DefaultWeightKg,
 		&i.SortOrder,
+		&i.CreatedByUserID,
+		&i.AutoProgress,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -519,16 +565,22 @@ func (q *Queries) HideExercise(ctx context.Context, arg HideExerciseParams) erro
 
 const listExercises = `-- name: ListExercises :many
 
-SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order
-FROM exercises ORDER BY sort_order
+SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order,
+       created_by_user_id, auto_progress, deleted_at
+FROM exercises
+WHERE deleted_at IS NULL
+  AND (created_by_user_id IS NULL OR created_by_user_id = CAST(?1 AS INTEGER))
+ORDER BY sort_order
 `
 
 // =============================================================================
 // EXERCISES
 // =============================================================================
-// Global order. Used by progression code where order does not matter.
-func (q *Queries) ListExercises(ctx context.Context) ([]Exercise, error) {
-	rows, err := q.db.QueryContext(ctx, listExercises)
+// Used by progression code. Scoped to one user: includes seeded exercises
+// (created_by_user_id IS NULL) and that user's own customs, excluding
+// soft-deleted rows.
+func (q *Queries) ListExercises(ctx context.Context, userID int64) ([]Exercise, error) {
+	rows, err := q.db.QueryContext(ctx, listExercises, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -545,6 +597,9 @@ func (q *Queries) ListExercises(ctx context.Context) ([]Exercise, error) {
 			&i.DefaultReps,
 			&i.DefaultWeightKg,
 			&i.SortOrder,
+			&i.CreatedByUserID,
+			&i.AutoProgress,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -560,15 +615,19 @@ func (q *Queries) ListExercises(ctx context.Context) ([]Exercise, error) {
 }
 
 const listExercisesForUser = `-- name: ListExercisesForUser :many
-SELECT e.id, e.slug, e.name, e.kind, e.default_sets, e.default_reps, e.default_weight_kg, e.sort_order
+SELECT e.id, e.slug, e.name, e.kind, e.default_sets, e.default_reps, e.default_weight_kg, e.sort_order,
+       e.created_by_user_id, e.auto_progress, e.deleted_at
 FROM exercises e
 LEFT JOIN user_exercise_sort_order uso
-    ON uso.exercise_id = e.id AND uso.user_id = ?
+    ON uso.exercise_id = e.id AND uso.user_id = ?1
+WHERE e.deleted_at IS NULL
+  AND (e.created_by_user_id IS NULL OR e.created_by_user_id = ?1)
 ORDER BY COALESCE(uso.sort_order, e.sort_order), e.id
 `
 
 // Per-user order: rows in user_exercise_sort_order override exercises.sort_order.
-// Exercises without a per-user row fall back to the seeded default.
+// Exercises without a per-user row fall back to the seeded default. Filters
+// out other users' customs and soft-deleted rows.
 func (q *Queries) ListExercisesForUser(ctx context.Context, userID int64) ([]Exercise, error) {
 	rows, err := q.db.QueryContext(ctx, listExercisesForUser, userID)
 	if err != nil {
@@ -587,6 +646,9 @@ func (q *Queries) ListExercisesForUser(ctx context.Context, userID int64) ([]Exe
 			&i.DefaultReps,
 			&i.DefaultWeightKg,
 			&i.SortOrder,
+			&i.CreatedByUserID,
+			&i.AutoProgress,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1040,6 +1102,73 @@ func (q *Queries) ListWeightHistoryForExercise(ctx context.Context, arg ListWeig
 	return items, nil
 }
 
+const maxExerciseSortOrder = `-- name: MaxExerciseSortOrder :one
+SELECT CAST(COALESCE(MAX(sort_order), 0) AS INTEGER) AS max_sort_order FROM exercises
+`
+
+func (q *Queries) MaxExerciseSortOrder(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, maxExerciseSortOrder)
+	var max_sort_order int64
+	err := row.Scan(&max_sort_order)
+	return max_sort_order, err
+}
+
+const renameCustomExercise = `-- name: RenameCustomExercise :exec
+UPDATE exercises SET name = ?
+WHERE id = ? AND created_by_user_id = ?
+`
+
+type RenameCustomExerciseParams struct {
+	Name            string
+	ID              int64
+	CreatedByUserID sql.NullInt64
+}
+
+// Defence in depth: only the creator can rename their custom exercise.
+// Seeded rows (created_by_user_id IS NULL) are never affected because the
+// WHERE clause requires a matching user id.
+func (q *Queries) RenameCustomExercise(ctx context.Context, arg RenameCustomExerciseParams) error {
+	_, err := q.db.ExecContext(ctx, renameCustomExercise, arg.Name, arg.ID, arg.CreatedByUserID)
+	return err
+}
+
+const setSeededAutoProgress = `-- name: SetSeededAutoProgress :exec
+UPDATE exercises SET auto_progress = ?
+WHERE slug = ? AND created_by_user_id IS NULL
+`
+
+type SetSeededAutoProgressParams struct {
+	AutoProgress int64
+	Slug         string
+}
+
+// One-shot used by SeedExercises to align the auto_progress flag on the
+// two seeded exercises that are deliberately manual (walking, dumbbell_curls).
+// Only touches seeded rows (created_by_user_id IS NULL).
+func (q *Queries) SetSeededAutoProgress(ctx context.Context, arg SetSeededAutoProgressParams) error {
+	_, err := q.db.ExecContext(ctx, setSeededAutoProgress, arg.AutoProgress, arg.Slug)
+	return err
+}
+
+const softDeleteCustomExercise = `-- name: SoftDeleteCustomExercise :exec
+UPDATE exercises SET deleted_at = ?
+WHERE id = ? AND created_by_user_id = ?
+`
+
+type SoftDeleteCustomExerciseParams struct {
+	DeletedAt       sql.NullString
+	ID              int64
+	CreatedByUserID sql.NullInt64
+}
+
+// Soft-delete: the row stays for historical sets to reference but is hidden
+// from new workouts and from the per-user exercise list. Only the creator
+// can soft-delete their own custom.
+func (q *Queries) SoftDeleteCustomExercise(ctx context.Context, arg SoftDeleteCustomExerciseParams) error {
+	_, err := q.db.ExecContext(ctx, softDeleteCustomExercise, arg.DeletedAt, arg.ID, arg.CreatedByUserID)
+	return err
+}
+
 const unfinishWorkout = `-- name: UnfinishWorkout :exec
 UPDATE workouts SET completed_at = NULL WHERE id = ? AND user_id = ? AND workout_date = ?
 `
@@ -1148,8 +1277,8 @@ func (q *Queries) UpdateUserLastLogin(ctx context.Context, arg UpdateUserLastLog
 }
 
 const upsertExercise = `-- name: UpsertExercise :exec
-INSERT INTO exercises (slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO exercises (slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order, auto_progress)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(slug) DO UPDATE SET
     name = excluded.name,
     kind = excluded.kind,
@@ -1165,10 +1294,13 @@ type UpsertExerciseParams struct {
 	DefaultReps     int64
 	DefaultWeightKg float64
 	SortOrder       int64
+	AutoProgress    int64
 }
 
-// sort_order is intentionally only set on initial INSERT so that user
-// reordering on the settings page is not clobbered by the seed on restart.
+// Used only by SeedExercises for the global seeded list. sort_order and
+// auto_progress are intentionally NOT updated on conflict so that user
+// reordering / a future schema-bump for auto_progress aren't clobbered by
+// the seed on restart. created_by_user_id is implicitly NULL for seeded rows.
 func (q *Queries) UpsertExercise(ctx context.Context, arg UpsertExerciseParams) error {
 	_, err := q.db.ExecContext(ctx, upsertExercise,
 		arg.Slug,
@@ -1178,6 +1310,7 @@ func (q *Queries) UpsertExercise(ctx context.Context, arg UpsertExerciseParams) 
 		arg.DefaultReps,
 		arg.DefaultWeightKg,
 		arg.SortOrder,
+		arg.AutoProgress,
 	)
 	return err
 }

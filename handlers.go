@@ -269,7 +269,7 @@ func getOrCreateTodaysWorkout(ctx context.Context, userID int64, today string) (
 		return db.Workout{}, err
 	}
 
-	exercises, err := q.ListExercises(ctx)
+	exercises, err := q.ListExercises(ctx, userID)
 	if err != nil {
 		return db.Workout{}, err
 	}

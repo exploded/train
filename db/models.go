@@ -17,6 +17,9 @@ type Exercise struct {
 	DefaultReps     int64
 	DefaultWeightKg float64
 	SortOrder       int64
+	CreatedByUserID sql.NullInt64
+	AutoProgress    int64
+	DeletedAt       sql.NullString
 }
 
 type Session struct {

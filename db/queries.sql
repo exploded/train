@@ -56,33 +56,81 @@ DELETE FROM sessions WHERE expires_at <= ?;
 -- =============================================================================
 
 -- name: ListExercises :many
--- Global order. Used by progression code where order does not matter.
-SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order
-FROM exercises ORDER BY sort_order;
+-- Used by progression code. Scoped to one user: includes seeded exercises
+-- (created_by_user_id IS NULL) and that user's own customs, excluding
+-- soft-deleted rows.
+SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order,
+       created_by_user_id, auto_progress, deleted_at
+FROM exercises
+WHERE deleted_at IS NULL
+  AND (created_by_user_id IS NULL OR created_by_user_id = CAST(sqlc.arg(user_id) AS INTEGER))
+ORDER BY sort_order;
 
 -- name: ListExercisesForUser :many
 -- Per-user order: rows in user_exercise_sort_order override exercises.sort_order.
--- Exercises without a per-user row fall back to the seeded default.
-SELECT e.id, e.slug, e.name, e.kind, e.default_sets, e.default_reps, e.default_weight_kg, e.sort_order
+-- Exercises without a per-user row fall back to the seeded default. Filters
+-- out other users' customs and soft-deleted rows.
+SELECT e.id, e.slug, e.name, e.kind, e.default_sets, e.default_reps, e.default_weight_kg, e.sort_order,
+       e.created_by_user_id, e.auto_progress, e.deleted_at
 FROM exercises e
 LEFT JOIN user_exercise_sort_order uso
-    ON uso.exercise_id = e.id AND uso.user_id = ?
+    ON uso.exercise_id = e.id AND uso.user_id = sqlc.arg(user_id)
+WHERE e.deleted_at IS NULL
+  AND (e.created_by_user_id IS NULL OR e.created_by_user_id = sqlc.arg(user_id))
 ORDER BY COALESCE(uso.sort_order, e.sort_order), e.id;
 
 -- name: GetExerciseByID :one
-SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order
+-- No visibility filter at the SQL layer; handlers enforce ownership before
+-- mutation (custom rename/delete) and seeded vs custom is determined by the
+-- created_by_user_id column on the returned row.
+SELECT id, slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order,
+       created_by_user_id, auto_progress, deleted_at
 FROM exercises WHERE id = ?;
 
 -- name: UpsertExercise :exec
--- sort_order is intentionally only set on initial INSERT so that user
--- reordering on the settings page is not clobbered by the seed on restart.
-INSERT INTO exercises (slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+-- Used only by SeedExercises for the global seeded list. sort_order and
+-- auto_progress are intentionally NOT updated on conflict so that user
+-- reordering / a future schema-bump for auto_progress aren't clobbered by
+-- the seed on restart. created_by_user_id is implicitly NULL for seeded rows.
+INSERT INTO exercises (slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order, auto_progress)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(slug) DO UPDATE SET
     name = excluded.name,
     kind = excluded.kind,
     default_sets = excluded.default_sets,
     default_reps = excluded.default_reps;
+
+-- name: SetSeededAutoProgress :exec
+-- One-shot used by SeedExercises to align the auto_progress flag on the
+-- two seeded exercises that are deliberately manual (walking, dumbbell_curls).
+-- Only touches seeded rows (created_by_user_id IS NULL).
+UPDATE exercises SET auto_progress = ?
+WHERE slug = ? AND created_by_user_id IS NULL;
+
+-- name: CreateCustomExercise :execlastid
+-- Inserts a user-created custom exercise. sort_order is computed by the
+-- caller (typically MAX(sort_order)+1 so the new exercise appears last in
+-- the global order; per-user reordering still applies on top).
+INSERT INTO exercises (slug, name, kind, default_sets, default_reps, default_weight_kg, sort_order,
+                      created_by_user_id, auto_progress)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: MaxExerciseSortOrder :one
+SELECT CAST(COALESCE(MAX(sort_order), 0) AS INTEGER) AS max_sort_order FROM exercises;
+
+-- name: RenameCustomExercise :exec
+-- Defence in depth: only the creator can rename their custom exercise.
+-- Seeded rows (created_by_user_id IS NULL) are never affected because the
+-- WHERE clause requires a matching user id.
+UPDATE exercises SET name = ?
+WHERE id = ? AND created_by_user_id = ?;
+
+-- name: SoftDeleteCustomExercise :exec
+-- Soft-delete: the row stays for historical sets to reference but is hidden
+-- from new workouts and from the per-user exercise list. Only the creator
+-- can soft-delete their own custom.
+UPDATE exercises SET deleted_at = ?
+WHERE id = ? AND created_by_user_id = ?;
 
 -- name: ClearUserExerciseSortOrder :exec
 DELETE FROM user_exercise_sort_order WHERE user_id = ?;

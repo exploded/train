@@ -17,6 +17,9 @@ var columnAdds = []struct {
 	table, column, decl string
 }{
 	{"workouts", "completed_at", "TEXT"},
+	{"exercises", "created_by_user_id", "INTEGER REFERENCES users(id) ON DELETE CASCADE"},
+	{"exercises", "auto_progress", "INTEGER NOT NULL DEFAULT 1"},
+	{"exercises", "deleted_at", "TEXT"},
 }
 
 func Migrate(d *sql.DB) error {

@@ -28,7 +28,16 @@ CREATE TABLE IF NOT EXISTS exercises (
     default_sets      INTEGER NOT NULL,
     default_reps      INTEGER NOT NULL,
     default_weight_kg REAL NOT NULL,
-    sort_order        INTEGER NOT NULL
+    sort_order        INTEGER NOT NULL,
+    -- NULL = seeded/global; non-NULL = a user-created custom exercise visible
+    -- only to that user.
+    created_by_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    -- 0 = manual weight only; 1 = bumps +2.5 kg after 5 successful sessions.
+    -- Cardio is always treated as 0 regardless of this column.
+    auto_progress     INTEGER NOT NULL DEFAULT 1,
+    -- NULL = active; non-NULL ISO timestamp = soft-deleted (hidden from new
+    -- workouts but historical sets remain readable).
+    deleted_at        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS user_exercise_weight (

@@ -19,8 +19,8 @@ const (
 // before any sets are created. For each exercise, it inspects the user's
 // most recent prior workout: if every set for that exercise was successful,
 // the streak ticks up; if the streak hits the bump threshold, weight goes up
-// by 2.5 kg and the streak resets. Walking and dumbbell curls don't auto-
-// progress.
+// by 2.5 kg and the streak resets. Cardio never auto-progresses; non-cardio
+// exercises only auto-progress if their auto_progress flag is set.
 func runProgressionForUser(ctx context.Context, q *db.Queries, userID int64, todayDate string) error {
 	prev, err := q.GetLastWorkoutBefore(ctx, db.GetLastWorkoutBeforeParams{
 		UserID: userID, WorkoutDate: todayDate,
@@ -32,7 +32,7 @@ func runProgressionForUser(ctx context.Context, q *db.Queries, userID int64, tod
 		return err
 	}
 
-	exercises, err := q.ListExercises(ctx)
+	exercises, err := q.ListExercises(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -94,12 +94,9 @@ func runProgressionForUser(ctx context.Context, q *db.Queries, userID int64, tod
 
 func exerciseAutoProgresses(ex db.Exercise) bool {
 	if ex.Kind == "cardio" {
-		return false
+		return false // cardio never auto-progresses regardless of column
 	}
-	if ex.Slug == "dumbbell_curls" {
-		return false // 1.25 kg dumbbell jumps are awkward; manual only
-	}
-	return true
+	return ex.AutoProgress != 0
 }
 
 func allSetsSuccessful(sets []db.Set) bool {

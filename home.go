@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	historyPageSize  = 30
-	homeRecentLimit  = 5
-	homeActivityDays = 30
+	historyPageSize   = 30
+	homeRecentLimit   = 5
+	homeActivityWeeks = 16 // 16 cols x 7 rows = 112 days
 )
 
 // =============================================================================
@@ -30,7 +30,7 @@ type viewHome struct {
 	Today     viewTodayCard
 	Stats     viewStats
 	Weights   []viewWeightRow
-	Activity  []viewActivityCell // oldest -> newest, len == homeActivityDays
+	Activity  []viewActivityCol // oldest -> newest, len == homeActivityWeeks
 	Recent    []viewHistoryRow   // capped at homeRecentLimit
 	HasMore   bool               // whether to show "View all sessions" link
 }
@@ -52,8 +52,13 @@ type viewWeightRow struct {
 }
 
 type viewActivityCell struct {
-	Date  string // YYYY-MM-DD
-	State string // "done" | "partial" | "rest" | "today"
+	Date  string // YYYY-MM-DD; empty for "pad" cells
+	State string // "done" | "partial" | "rest" | "today" | "pad"
+}
+
+type viewActivityCol struct {
+	Month string              // abbreviated month label above this column, or ""
+	Cells [7]viewActivityCell // Sun..Sat (rows 0..6)
 }
 
 type viewTodayCard struct {
@@ -172,8 +177,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		vh.Today = card
 	}
 
-	// Last 30 days of workouts powers both Stats and Activity grid.
-	since := time.Now().In(appLocation).AddDate(0, 0, -(homeActivityDays - 1)).Format("2006-01-02")
+	// Recent workouts power both Stats and the Activity grid (16-week window).
+	since := time.Now().In(appLocation).AddDate(0, 0, -(homeActivityWeeks*7 - 1)).Format("2006-01-02")
 	recentWks, err := queries.ListUserWorkoutsSince(ctx, db.ListUserWorkoutsSinceParams{
 		UserID: user.ID, WorkoutDate: since,
 	})
@@ -209,7 +214,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildStats summarizes the user's recent workout cadence. recentWks must be
-// the window-of-30-days slice (DESC by date) returned by ListUserWorkoutsSince.
+// the recent slice (DESC by date) returned by ListUserWorkoutsSince.
 func buildStats(_ context.Context, _ int64, today string, recentWks []db.ListUserWorkoutsSinceRow) viewStats {
 	t, err := time.ParseInLocation("2006-01-02", today, appLocation)
 	if err != nil {
@@ -246,8 +251,11 @@ func buildStats(_ context.Context, _ int64, today string, recentWks []db.ListUse
 	return s
 }
 
-// buildActivity returns 30 cells, oldest -> newest, ending today.
-func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow) []viewActivityCell {
+// buildActivity returns homeActivityWeeks columns, oldest -> newest. Each column
+// is a Sun..Sat week. The last column ends on the Saturday of the current week;
+// cells after today are "pad" (blank). Months get an abbreviated label above the
+// column where the month first appears (and always on column 0).
+func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow) []viewActivityCol {
 	byDate := make(map[string]db.ListUserWorkoutsSinceRow, len(recentWks))
 	for _, w := range recentWks {
 		byDate[w.WorkoutDate] = w
@@ -256,23 +264,43 @@ func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow) []view
 	if err != nil {
 		return nil
 	}
-	cells := make([]viewActivityCell, 0, homeActivityDays)
-	for i := homeActivityDays - 1; i >= 0; i-- {
-		date := t.AddDate(0, 0, -i).Format("2006-01-02")
-		state := "rest"
-		if w, ok := byDate[date]; ok {
-			if w.CompletedAt.Valid {
-				state = "done"
-			} else {
-				state = "partial"
+	trailPad := 6 - int(t.Weekday())
+	lastSat := t.AddDate(0, 0, trailPad)
+	firstSun := lastSat.AddDate(0, 0, -(homeActivityWeeks*7 - 1))
+
+	cols := make([]viewActivityCol, homeActivityWeeks)
+	var prevMonth time.Month
+	for c := 0; c < homeActivityWeeks; c++ {
+		var col viewActivityCol
+		sunday := firstSun.AddDate(0, 0, c*7)
+		for r := 0; r < 7; r++ {
+			d := sunday.AddDate(0, 0, r)
+			if d.After(t) {
+				col.Cells[r] = viewActivityCell{State: "pad"}
+				continue
 			}
+			date := d.Format("2006-01-02")
+			state := "rest"
+			if w, ok := byDate[date]; ok {
+				if w.CompletedAt.Valid {
+					state = "done"
+				} else {
+					state = "partial"
+				}
+			}
+			if date == today && state == "rest" {
+				state = "today"
+			}
+			col.Cells[r] = viewActivityCell{Date: date, State: state}
 		}
-		if date == today && state == "rest" {
-			state = "today"
+		m := sunday.Month()
+		if c == 0 || m != prevMonth {
+			col.Month = m.String()[:3]
 		}
-		cells = append(cells, viewActivityCell{Date: date, State: state})
+		prevMonth = m
+		cols[c] = col
 	}
-	return cells
+	return cols
 }
 
 // buildWeights produces one row per visible exercise, with current working
