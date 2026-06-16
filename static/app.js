@@ -50,6 +50,23 @@
   let raf = 0;
   let beeped = false;
 
+  // Persist the running timer so reopening / reloading the workout resumes it
+  // instead of silently dropping the rest. We store only the start timestamp
+  // (scoped to this workout) and recompute everything from it on load.
+  const STORE_KEY = "train.restTimer";
+  const workoutId = el.box.getAttribute("data-workout-id") || "";
+  // A real rest is at most a few minutes; anything older is a stale leftover
+  // from a previous session and should not pop a ghost "Lift now!" timer.
+  const MAX_RESTORE_MS = 30 * 60 * 1000;
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ id: workoutId, startedAt: startedAt }));
+    } catch (_) {}
+  }
+  function clearSaved() {
+    try { localStorage.removeItem(STORE_KEY); } catch (_) {}
+  }
+
   // iOS Safari requires the AudioContext be created/resumed inside a user
   // gesture, AND a source node actually started once to route audio to the
   // hardware. Even after that, the context can silently drift back to
@@ -147,21 +164,39 @@
     raf = requestAnimationFrame(tick);
   }
 
-  function start() {
-    startedAt = Date.now();
+  // Drive the timer from a given start timestamp. Used both for a fresh start
+  // (now) and for resuming a persisted timer (an earlier timestamp). If the
+  // rest period has already elapsed we come up directly in the "Lift now!"
+  // count-up state with beeped=true, so a resumed timer never replays the pip.
+  function begin(fromStartedAt) {
+    startedAt = fromStartedAt;
     endsAt = startedAt + REST_SECONDS * 1000;
-    beeped = false;
+    const crossed = Date.now() - startedAt >= REST_SECONDS * 1000;
+    beeped = crossed;
     el.box.hidden = false;
-    el.label.textContent = "Rest";
-    // Paint the initial countdown frame eagerly so a re-trigger from the
-    // "Lift now!" count-up state snaps cleanly to 1:30 / full bar instead of
-    // briefly showing the stale count-up value before the next rAF runs.
-    el.time.textContent = fmt(REST_SECONDS);
-    el.fill.style.width = "100%";
-    el.box.classList.add("rest-timer--running");
-    el.box.classList.remove("rest-timer--done");
+    if (crossed) {
+      el.box.classList.add("rest-timer--done");
+      el.box.classList.remove("rest-timer--running");
+      el.label.textContent = "Lift now!";
+      el.time.textContent = fmt((Date.now() - startedAt) / 1000, "up");
+      el.fill.style.width = "0%";
+    } else {
+      el.box.classList.add("rest-timer--running");
+      el.box.classList.remove("rest-timer--done");
+      el.label.textContent = "Rest";
+      // Paint the initial countdown frame eagerly so a re-trigger from the
+      // "Lift now!" count-up state snaps cleanly to 1:30 / full bar instead of
+      // briefly showing the stale count-up value before the next rAF runs.
+      el.time.textContent = fmt(REST_SECONDS);
+      el.fill.style.width = "100%";
+    }
     if (raf) cancelAnimationFrame(raf);
     raf = requestAnimationFrame(tick);
+  }
+
+  function start() {
+    begin(Date.now());
+    save();
   }
 
   function stop() {
@@ -169,7 +204,22 @@
     raf = 0;
     el.box.hidden = true;
     el.box.classList.remove("rest-timer--running", "rest-timer--done");
+    clearSaved();
   }
+
+  // On load, resume a timer left running for this workout. Skip finished
+  // (locked) workouts and anything older than the staleness cap.
+  function restore() {
+    if (document.body.classList.contains("page--locked")) { clearSaved(); return; }
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (_) {}
+    if (!saved || typeof saved.startedAt !== "number") return;
+    if (workoutId && saved.id && saved.id !== workoutId) return;
+    const elapsed = Date.now() - saved.startedAt;
+    if (elapsed < 0 || elapsed > MAX_RESTORE_MS) { clearSaved(); return; }
+    begin(saved.startedAt);
+  }
+  restore();
 
   el.close.addEventListener("click", stop);
 
