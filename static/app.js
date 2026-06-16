@@ -50,20 +50,42 @@
   let raf = 0;
   let beeped = false;
 
-  // iOS Safari requires the AudioContext be created or resumed inside a user
-  // gesture; once unlocked it stays usable for the page lifetime. We lazily
-  // create it on the first pointerdown so the timer can play freely later.
+  // iOS Safari requires the AudioContext be created/resumed inside a user
+  // gesture, AND a source node actually started once to route audio to the
+  // hardware. Even after that, the context can silently drift back to
+  // "suspended"/"interrupted" (e.g. after a tab switch or idle period), and a
+  // suspended context's clock is frozen so scheduled oscillators play nothing.
+  // We therefore (a) lazily create it, (b) re-resume on every tap and whenever
+  // the page regains visibility to keep it warm, and (c) prime it once with a
+  // silent buffer so the very first real beep is audible.
   let audioCtx = null;
+  let audioPrimed = false;
+  function getCtx() {
+    if (!audioCtx) {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return null;
+      try { audioCtx = new Ctor(); } catch (_) { audioCtx = null; }
+    }
+    return audioCtx;
+  }
   function unlockAudio() {
-    if (audioCtx) return;
-    const Ctor = window.AudioContext || window.webkitAudioContext;
-    if (!Ctor) return;
-    try {
-      audioCtx = new Ctor();
-      if (audioCtx.state === "suspended") audioCtx.resume();
-    } catch (_) { audioCtx = null; }
+    const ctx = getCtx();
+    if (!ctx) return;
+    if (ctx.state !== "running" && ctx.resume) ctx.resume();
+    if (!audioPrimed) {
+      try {
+        const src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, 22050);
+        src.connect(ctx.destination);
+        src.start(0);
+        audioPrimed = true;
+      } catch (_) {}
+    }
   }
   document.addEventListener("pointerdown", unlockAudio, { once: false, passive: true });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) unlockAudio();
+  });
 
   function soundEnabled() {
     // Cookie set by POST /settings/rest-sound/toggle. Default = on.
@@ -71,19 +93,24 @@
   }
 
   function beep() {
-    if (!soundEnabled() || !audioCtx) return;
+    if (!soundEnabled()) return;
+    const ctx = getCtx();
+    if (!ctx) return;
+    // The context may have drifted to "suspended"/"interrupted" since the last
+    // tap; resume it so the scheduled pips actually sound.
+    if (ctx.state !== "running" && ctx.resume) ctx.resume();
     // Two short sine pips (~880 Hz then ~660 Hz), gain-ramped to avoid clicks.
-    const now = audioCtx.currentTime;
+    const now = ctx.currentTime;
     [[880, 0], [660, 0.18]].forEach(function (p) {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = p[0];
       const t0 = now + p[1];
       gain.gain.setValueAtTime(0.0001, t0);
       gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
-      osc.connect(gain).connect(audioCtx.destination);
+      osc.connect(gain).connect(ctx.destination);
       osc.start(t0);
       osc.stop(t0 + 0.18);
     });
