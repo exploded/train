@@ -16,7 +16,7 @@ import (
 const (
 	historyPageSize   = 30
 	homeRecentLimit   = 5
-	homeActivityWeeks = 16 // 16 cols x 7 rows = 112 days
+	homeActivityWeeks = 20 // 20 cols x 7 rows = 140 days
 )
 
 // =============================================================================
@@ -177,7 +177,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		vh.Today = card
 	}
 
-	// Recent workouts power both Stats and the Activity grid (16-week window).
+	// Recent workouts power both Stats and the Activity grid (20-week window).
 	since := time.Now().In(appLocation).AddDate(0, 0, -(homeActivityWeeks*7 - 1)).Format("2006-01-02")
 	recentWks, err := queries.ListUserWorkoutsSince(ctx, db.ListUserWorkoutsSinceParams{
 		UserID: user.ID, WorkoutDate: since,

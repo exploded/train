@@ -1205,10 +1205,13 @@ a { color: var(--brand); text-decoration: none; }
 }
 .dot--on { background: var(--dot-on); }
 
-/* ========== 30-day activity grid ========== */
+/* ========== 20-week activity grid ========== */
 .activity {
   margin: 0.5rem 0 0;
   padding: 0 1rem;
+  /* Safety net: on very narrow screens the 20 columns can exceed the viewport;
+     scroll rather than silently clipping the most recent weeks off the right. */
+  overflow-x: auto;
 }
 .activity__layout {
   display: inline-grid;
@@ -1222,8 +1225,8 @@ a { color: var(--brand); text-decoration: none; }
   grid-column: 2;
   grid-row: 1;
   display: grid;
-  grid-template-columns: repeat(16, 13px);
-  column-gap: 3px;
+  grid-template-columns: repeat(20, 13px);
+  column-gap: 2px;
   font-size: 0.65rem;
   color: var(--ink-soft);
   line-height: 1;
@@ -1251,7 +1254,7 @@ a { color: var(--brand); text-decoration: none; }
   grid-template-rows: repeat(7, 13px);
   grid-auto-flow: column;
   grid-auto-columns: 13px;
-  gap: 3px;
+  gap: 3px 2px; /* 3px between rows (aligns with weekday labels), 2px between week columns */
 }
 .activity__cell {
   display: block;
