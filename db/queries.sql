@@ -227,6 +227,15 @@ FROM workouts
 WHERE user_id = ? AND workout_date >= ?
 ORDER BY workout_date DESC;
 
+-- name: ListWorkoutDatesWithSetsSince :many
+-- Distinct dates in the window that have at least one logged (tapped) set.
+-- Used by the activity grid to treat a past day with recorded sets as "done"
+-- even if the workout was never explicitly finished (e.g. imported history).
+SELECT DISTINCT w.workout_date
+FROM workouts w
+JOIN sets s ON s.workout_id = w.id
+WHERE w.user_id = ? AND w.workout_date >= ? AND s.actual_reps IS NOT NULL;
+
 -- name: ListUserExerciseWeights :many
 SELECT exercise_id, weight_kg, success_streak
 FROM user_exercise_weight WHERE user_id = ?;
