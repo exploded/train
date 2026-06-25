@@ -31,8 +31,8 @@ type viewHome struct {
 	Stats     viewStats
 	Weights   []viewWeightRow
 	Activity  []viewActivityCol // oldest -> newest, len == homeActivityWeeks
-	Recent    []viewHistoryRow  // capped at homeRecentLimit
-	HasMore   bool              // whether to show "View all sessions" link
+	Recent    []viewHistoryRow   // capped at homeRecentLimit
+	HasMore   bool               // whether to show "View all sessions" link
 }
 
 type viewStats struct {
@@ -186,17 +186,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "home: workouts since", err)
 		return
 	}
-	// Dates with at least one logged set power the grid's "done" state for
-	// past days that were never explicitly finished (e.g. imported history).
-	loggedDates, err := queries.ListWorkoutDatesWithSetsSince(ctx, db.ListWorkoutDatesWithSetsSinceParams{
-		UserID: user.ID, WorkoutDate: since,
-	})
-	if err != nil {
-		serverError(w, "home: workout dates with sets", err)
-		return
-	}
 	vh.Stats = buildStats(ctx, user.ID, today, recentWks)
-	vh.Activity = buildActivity(today, recentWks, loggedDates)
+	vh.Activity = buildActivity(today, recentWks)
 
 	// Working weights tile.
 	vh.Weights, err = buildWeights(ctx, user.ID, exercises)
@@ -262,18 +253,12 @@ func buildStats(_ context.Context, _ int64, today string, recentWks []db.ListUse
 
 // buildActivity returns homeActivityWeeks columns, oldest -> newest. Each column
 // is a Sun..Sat week. The last column ends on the Saturday of the current week;
-// cells after today are "pad" (blank). A day is "done" when its workout was
-// finished (completed_at) or, for a past day, when it has any logged set;
-// loggedDates carries those dates. Months get an abbreviated label above the
+// cells after today are "pad" (blank). Months get an abbreviated label above the
 // column where the month first appears (and always on column 0).
-func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow, loggedDates []string) []viewActivityCol {
+func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow) []viewActivityCol {
 	byDate := make(map[string]db.ListUserWorkoutsSinceRow, len(recentWks))
 	for _, w := range recentWks {
 		byDate[w.WorkoutDate] = w
-	}
-	logged := make(map[string]bool, len(loggedDates))
-	for _, d := range loggedDates {
-		logged[d] = true
 	}
 	t, err := time.ParseInLocation("2006-01-02", today, appLocation)
 	if err != nil {
@@ -297,14 +282,9 @@ func buildActivity(today string, recentWks []db.ListUserWorkoutsSinceRow, logged
 			date := d.Format("2006-01-02")
 			state := "rest"
 			if w, ok := byDate[date]; ok {
-				switch {
-				case w.CompletedAt.Valid:
+				if w.CompletedAt.Valid {
 					state = "done"
-				case date != today && logged[date]:
-					// A past day with logged sets counts as done even if the
-					// workout was never explicitly finished (imported history).
-					state = "done"
-				default:
+				} else {
 					state = "partial"
 				}
 			}
